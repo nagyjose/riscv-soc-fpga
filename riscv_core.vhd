@@ -7,7 +7,7 @@ entity riscv_core is
         clk : in std_logic;
         rst : in std_logic;
         -- Zde v budoucnu přibudou piny pro FPGA (např. gpio_out, uart_tx)
-
+        
         -- NAŠE PRVNÍ PERIFERIE: Výstup pro Testbench
         tb_success   : out std_logic;
         tb_error_id  : out std_logic_vector(15 downto 0)
@@ -74,10 +74,10 @@ begin
             mem_byte_ena => cpu_mem_byte_ena
         );
 
-	 -- ========================================================================
+    -- ========================================================================
     -- 3. INSTANTIACE SDÍLENÉ DUAL-PORT PAMĚTI
     -- ========================================================================
-	 u_memory: entity work.dual_port_ram
+    u_memory: entity work.dual_port_ram
         port map (
             clk         => clk,
             

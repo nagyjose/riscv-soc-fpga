@@ -26,4 +26,7 @@ package pkg_riscv is
     constant OPC_LUI      : std_logic_vector(6 downto 0) := "0110111"; -- Load Upper Immediate
     constant OPC_AUIPC    : std_logic_vector(6 downto 0) := "0010111"; -- Add Upper Immediate to PC
 
+    -- Systémová instrukce (Řízení procesoru, přerušení a systémové registry)
+    constant OPC_SYSTEM   : std_logic_vector(6 downto 0) := "1110011";
+
 end package pkg_riscv;

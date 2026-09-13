@@ -70,11 +70,10 @@ begin
     -- ========================================================================
     -- V M4K paměti na adrese 0 může být odpad (při startu FPGA).
     -- Proto na výstupu data natvrdo přepíšeme na nuly, pokud někdo čte z x0
-	 
-	 -- Pokud se ve stejném taktu do registru zapisuje a zároveň z něj čte,
+    -- Pokud se ve stejném taktu do registru zapisuje a zároveň z něj čte,
     -- musíme data přeposlat přímo ze zápisu (tzv. Write-Through), protože
     -- M4K/LE paměť by vrátila starou hodnotu těsně před zápise.
-	 rd_data1 <= (others => '0') when rd_addr1 = "00000" else 
+    rd_data1 <= (others => '0') when rd_addr1 = "00000" else 
                 wr_data         when (wr_en = '1' and rd_addr1 = wr_addr) else 
                 out_data1;
                 

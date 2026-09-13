@@ -64,18 +64,12 @@ architecture rtl of dual_port_ram is
     
     -- B) TOTO VIDÍ JEN QUARTUS: Čistá neinicializovaná paměť (Dokonalá šablona pro M4K)
     -- synthesis read_comments_as_HDL on
-    -- signal ram : ram_type;
-    -- synthesis read_comments_as_HDL off
-    
-    -- ========================================================================
-    -- ATRIBUTY PRO QUARTUS
-    -- ========================================================================
-    attribute ram_init_file : string;
-    -- 2. ZMĚNA: Zde Quartusu natvrdo předhodíme MIF formát!
-    attribute ram_init_file of ram : signal is "program.mif";
-    
-    attribute ramstyle : string;
-    attribute ramstyle of ram : signal is "M4K";
+    -- signal ram : ram_type;  
+    -- attribute ram_init_file : string;
+    -- attribute ram_init_file of ram : signal is "program.mif";
+    -- attribute ramstyle : string;
+    -- attribute ramstyle of ram : signal is "M4K";
+	 -- synthesis read_comments_as_HDL off=
     
     signal word_addr_a : integer range 0 to RAM_SIZE_WORDS - 1;
     signal word_addr_b : integer range 0 to RAM_SIZE_WORDS - 1;

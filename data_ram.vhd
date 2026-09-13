@@ -30,10 +30,10 @@ architecture rtl of data_ram is
     -- Všechny buňky při startu naplníme nulami
     type ram_type is array (0 to RAM_SIZE_WORDS - 1) of std_logic_vector(31 downto 0);
     signal ram : ram_type := (others => (others => '0'));
-	 
-	 signal word_addr : integer;
-	 
-	 -- Vynucení do M4K bloků
+
+    signal word_addr : integer;
+
+    -- Vynucení do M4K bloků
     attribute ramstyle : string;
     attribute ramstyle of ram : signal is "M4K";
 begin

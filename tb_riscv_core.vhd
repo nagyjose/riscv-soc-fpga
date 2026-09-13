@@ -51,12 +51,12 @@ begin
         if rising_edge(clk) then
             if tb_success = '1' then
                 assert false report LF &
-												"===============================================" & LF &
+                                    "===============================================" & LF &
                                     "  [ SUCCESS ] SoC Funguje! Dual-Port RAM OK!" & LF &
                                     "===============================================" severity failure;
             elsif unsigned(tb_error_id) /= 0 then
                 assert false report LF &
-												"===============================================" & LF &
+                                    "===============================================" & LF &
                                     "  [ ERROR ] Selhal test cislo: " & integer'image(to_integer(unsigned(tb_error_id))) & LF &
                                     "===============================================" severity failure;
             end if;
@@ -77,7 +77,10 @@ begin
         
         -- Timeout bez diakritiky
         wait for 10 ms; 
-        assert false report "[TIMEOUT] Simulace bezela moc dlouho!" severity failure;
+        assert false report LF &
+                            "==========================================" & LF &
+                            "  [TIMEOUT] Simulace bezela moc dlouho!" & LF &
+                            "==========================================" severity failure;
     end process;
 
 end architecture sim;

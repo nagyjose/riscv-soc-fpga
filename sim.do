@@ -14,6 +14,7 @@ vcom branch_unit.vhd
 vcom store_formatter.vhd
 vcom load_formatter.vhd
 vcom dual_port_ram.vhd
+vcom csr_unit.vhd
 
 # 3. DATOVÁ CESTA A TOP-LEVEL (Spojují předchozí moduly dohromady)
 vcom datapath.vhd

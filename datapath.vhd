@@ -35,7 +35,7 @@ architecture rtl of datapath is
     -- 2. Fáze ID/EX (Mezi dekodérem a ALU)
     type id_ex_reg_t is record
         pc         : std_logic_vector(31 downto 0);
-		  funct3		 : std_logic_vector(2 downto 0);
+        funct3     : std_logic_vector(2 downto 0);
         reg_data1  : std_logic_vector(31 downto 0);
         reg_data2  : std_logic_vector(31 downto 0);
         imm        : std_logic_vector(31 downto 0);
@@ -48,10 +48,12 @@ architecture rtl of datapath is
         mem_write  : std_logic;
         alu_ctrl   : std_logic_vector(3 downto 0);
         alu_src    : std_logic;
-		  branch		 : std_logic;
-		  jump		 : std_logic;
-		  jalr       : std_logic;                    
-        alu_src_a  : std_logic;                    
+        branch     : std_logic;
+        jump       : std_logic;
+        jalr       : std_logic;                    
+        alu_src_a  : std_logic;  
+        csr_cmd    : std_logic_vector(1 downto 0);
+        is_mret    : std_logic;                  
     end record;
 
     -- 3. Fáze EX/MEM (Mezi ALU a Datovou RAM)
@@ -59,12 +61,13 @@ architecture rtl of datapath is
         alu_res    : std_logic_vector(31 downto 0);
         wr_data    : std_logic_vector(31 downto 0); -- Data pro uložení do RAM
         rd_addr    : std_logic_vector(4 downto 0);  -- Cílový registr stále cestuje!
+        csr_rdata  : std_logic_vector(31 downto 0);
         -- Řídicí signály
         reg_write  : std_logic;
         res_src    : std_logic_vector(1 downto 0);
         mem_write  : std_logic;
-		  pc_plus_4  : std_logic_vector(31 downto 0); -- Návratová adresa pro JAL/JALR
-		  funct3		 : std_logic_vector(2 downto 0);  -- Přenos typu (B/H/W)
+        pc_plus_4  : std_logic_vector(31 downto 0); -- Návratová adresa pro JAL/JALR
+        funct3     : std_logic_vector(2 downto 0);  -- Přenos typu (B/H/W)
     end record;
 
     -- 4. Fáze MEM/WB (Mezi Datovou RAM a zápisem zpět do registrů)
@@ -72,10 +75,11 @@ architecture rtl of datapath is
         alu_res    : std_logic_vector(31 downto 0);
         mem_data   : std_logic_vector(31 downto 0);
         rd_addr    : std_logic_vector(4 downto 0);
+        csr_rdata  : std_logic_vector(31 downto 0);
         -- Řídicí signály
         reg_write  : std_logic;
         res_src    : std_logic_vector(1 downto 0);
-		  pc_plus_4  : std_logic_vector(31 downto 0);  
+        pc_plus_4  : std_logic_vector(31 downto 0);  
     end record;
 
     -- ========================================================================
@@ -90,7 +94,7 @@ architecture rtl of datapath is
     signal pc_current : std_logic_vector(31 downto 0) := (others => '0');
     signal pc_next    : std_logic_vector(31 downto 0);
 
-	 -- ========================================================================
+    -- ========================================================================
     -- Vnitřní propojovací signály (drátování mezi krabičkami)
     -- ========================================================================
     -- Signály z Dekodéru ve fázi ID
@@ -101,57 +105,64 @@ architecture rtl of datapath is
     signal id_res_src   : std_logic_vector(1 downto 0);
     signal id_branch    : std_logic;
     signal id_jump      : std_logic;
-	 signal id_jalr      : std_logic;
+    signal id_jalr      : std_logic;
     signal id_alu_src_a : std_logic;
     signal id_alu_ctrl  : std_logic_vector(3 downto 0);
-    
     signal id_imm_ext   : std_logic_vector(31 downto 0);
     signal id_rd_data1  : std_logic_vector(31 downto 0);
     signal id_rd_data2  : std_logic_vector(31 downto 0);
+    signal id_csr_cmd   : std_logic_vector(1 downto 0);
+    signal id_is_mret   : std_logic;
     
     -- Vstupy pro ALU ve fázi EX
-	 signal ex_alu_src_a : std_logic_vector(31 downto 0);
+    signal ex_alu_src_a : std_logic_vector(31 downto 0);
     signal ex_alu_src_b : std_logic_vector(31 downto 0);
     signal ex_alu_res   : std_logic_vector(31 downto 0);
 
     -- Multiplexer pro Write-Back fázi (co se zapisuje do registru)
     signal wb_result    : std_logic_vector(31 downto 0);
-	 
-	 -- Signály pro výpočet adresy další instrukce
+
+    -- Signály pro výpočet adresy další instrukce
     signal pc_plus_4 : std_logic_vector(31 downto 0);
     signal pc_target : std_logic_vector(31 downto 0);
     signal pc_src    : std_logic; -- Výhybka: 0 = PC+4, 1 = Skok
-	 
-	 -- ========================================================================
+
+    -- Signály pro CSR jednotku a obsluhu přerušení
+    signal ex_csr_rdata : std_logic_vector(31 downto 0);
+    signal epc_out      : std_logic_vector(31 downto 0);
+    signal trap_target  : std_logic_vector(31 downto 0);
+    signal trap_fire    : std_logic;
+
+    -- ========================================================================
     -- Signály pro Hazard Unit (Řešení kolizí a skoků)
     -- ========================================================================
     signal forward_a    : std_logic_vector(1 downto 0);
     signal forward_b    : std_logic_vector(1 downto 0);
     signal flush_if_id  : std_logic;
     signal flush_id_ex  : std_logic;
-	 
-	 signal stall_pc	   : std_logic;
-	 signal stall_if_id  : std_logic;
+
+    signal stall_pc	   : std_logic;
+    signal stall_if_id  : std_logic;
     
     -- Mezisignály pro vstupy do ALU (po aplikování zkratky)
     signal alu_src_a_fw : std_logic_vector(31 downto 0);
     signal alu_src_b_fw : std_logic_vector(31 downto 0);
-	 
-	 -- Signál pro upravená data načtená z RAM
-	 signal mem_rd_data_fmt: std_logic_vector(31 downto 0);
+
+    -- Signál pro upravená data načtená z RAM
+    signal mem_rd_data_fmt: std_logic_vector(31 downto 0);
 
 begin
 
-	 -- ========================================================================
+    -- ========================================================================
     -- PROPOJENÍ S VNĚJŠÍM SVĚTEM (Paměti)
     -- ========================================================================
     
-	 -- Posíláme data ven z procesoru
+    -- Posíláme data ven z procesoru
     instr_addr  <= pc_current;
     mem_addr    <= ex_mem.alu_res;
 
     -- ========================================================================
-    -- INSTANTIACE KOMPONENT (FÁZE DECODE - ID)
+    -- A. INSTANTIACE KOMPONENT (FÁZE DECODE - ID)
     -- ========================================================================
 
     -- 1. Řídicí jednotka (Dekodér)
@@ -161,6 +172,7 @@ begin
             opcode    => if_id.instr(6 downto 0),
             funct3    => if_id.instr(14 downto 12),
             funct7_b5 => if_id.instr(30),
+            funct12   => if_id.instr(31 downto 20),
             
             reg_write => id_reg_write,
             imm_src   => id_imm_src,
@@ -169,9 +181,11 @@ begin
             res_src   => id_res_src,
             branch    => id_branch,
             jump      => id_jump,
-				jalr      => id_jalr,      
+            jalr      => id_jalr,      
             alu_src_a => id_alu_src_a,
-            alu_ctrl  => id_alu_ctrl
+            alu_ctrl  => id_alu_ctrl,
+            csr_cmd   => id_csr_cmd, 
+            is_mret   => id_is_mret 
         );
 
     -- 2. Generátor konstant
@@ -199,8 +213,8 @@ begin
             wr_data  => wb_result          -- Výsledek k zapsání
         );
 
-	 -- ========================================================================
-    -- HAZARD UNIT A ZKRATKY (FORWARDING) PRO ALU (FÁZE EXECUTE - EX)
+    -- ========================================================================
+    -- B. HAZARD UNIT A ZKRATKY (FORWARDING) PRO ALU (FÁZE EXECUTE - EX)
     -- ========================================================================
     u_hazard_unit: entity work.hazard_unit
         port map (
@@ -210,21 +224,21 @@ begin
             reg_wr_mem  => ex_mem.reg_write,
             rd_addr_wb  => mem_wb.rd_addr,
             reg_wr_wb   => mem_wb.reg_write,
-				
-				rs1_addr_id => if_id.instr(19 downto 15),
+            
+            rs1_addr_id => if_id.instr(19 downto 15),
             rs2_addr_id => if_id.instr(24 downto 20),
             rd_addr_ex  => id_ex.rd_addr,
             res_src_ex  => id_ex.res_src,
-				
+            
             pc_src      => pc_src,
             
             forward_a   => forward_a,
             forward_b   => forward_b,
-				stall_pc    => stall_pc,
+            stall_pc    => stall_pc,
             stall_if_id => stall_if_id,
             flush_if_id => flush_if_id,
             flush_id_ex => flush_id_ex
-				
+            
             -- (nezapomeň tyto nové signály nahoře definovat jako `signal stall_pc, stall_if_id : std_logic;`)
         );
 
@@ -239,7 +253,7 @@ begin
                     id_ex.reg_data2;
 
     -- 3. Multiplexer před ALU: Registr vs. Konstanta
-	 ex_alu_src_a <= id_ex.pc  when id_ex.alu_src_a = '1' else alu_src_a_fw;
+    ex_alu_src_a <= id_ex.pc  when id_ex.alu_src_a = '1' else alu_src_a_fw;
     ex_alu_src_b <= id_ex.imm when id_ex.alu_src   = '1' else alu_src_b_fw;
 
 
@@ -253,8 +267,8 @@ begin
             alu_res   => ex_alu_res,
             zero_flag => open
         );
-		  
-	 -- 5. Vyhodnocování skoků (Branch Unit)
+
+    -- 5. Vyhodnocování skoků (Branch Unit)
     u_branch_unit: entity work.branch_unit
         port map (
             a        => alu_src_a_fw,   -- Chráněno proti hazardům
@@ -263,6 +277,28 @@ begin
             branch   => id_ex.branch,
             jump     => id_ex.jump,
             pc_src   => pc_src
+        );
+
+    -- ========================================================================
+    -- JEDNOTKA ŘÍDICÍCH REGISTRŮ (CSR Unit) - Fáze EX
+    -- ========================================================================
+    u_csr_unit: entity work.csr_unit
+        port map (
+            clk         => clk,
+            rst         => rst,
+            
+            -- Adresa CSR je horních 12 bitů, což náš I-Type dekodér vyhazuje jako konstantu!
+            csr_addr    => id_ex.imm(11 downto 0), 
+            csr_wdata   => alu_src_a_fw,           -- Data pro zápis s ošetřeným hazardem
+            csr_cmd     => id_ex.csr_cmd,
+            csr_rdata   => ex_csr_rdata,
+            
+            pc_in       => id_ex.pc,               -- Aktuální PC (kdyby přišlo přerušení)
+            irq_ext     => '0',                    -- ZATÍM UZEMNĚNO (Připraveno pro GPIO/Timer)
+            
+            epc_out     => epc_out,
+            trap_target => trap_target,
+            trap_fire   => trap_fire
         );
 
     -- ========================================================================
@@ -285,15 +321,16 @@ begin
             mem_data   => mem_rd_data,        -- Surová data rovnou z RAM (nyní jsou platná!)
             rd_data    => mem_rd_data_fmt     -- Zformátovaný výsledek
         );
-		 
-	 -- ========================================================================
+
+    -- ========================================================================
     -- D. WRITE-BACK MULTIPLEXER (Co se zapíše zpět do registru?)
     -- ========================================================================
-	 wb_result <= mem_wb.mem_data  when mem_wb.res_src = "01" else 
+    wb_result <= mem_wb.mem_data  when mem_wb.res_src = "01" else 
                  mem_wb.pc_plus_4 when mem_wb.res_src = "10" else -- Návratová adresa JAL
+                 mem_wb.csr_rdata when mem_wb.res_src = "11" else -- Data z CSR
                  mem_wb.alu_res;
-	 	   
-	 -- ========================================================================
+
+    -- ========================================================================
     -- E. LOGIKA PROGRAM COUNTERU (PC) A SKOKŮ
     -- ========================================================================
     
@@ -308,11 +345,14 @@ begin
 
     -- 3. Hlavní multiplexer pro další instrukci
     -- Zde se určuje definitivní hodnota pro pc_next.
-	 -- U JALR je cílem vypočtená adresa z ALU se smazaným nultým bitem.
+    -- U JALR je cílem vypočtená adresa z ALU se smazaným nultým bitem.
     -- Ostatní skoky (JAL, Branch) používají normální pc_target.
-	 pc_next <= (ex_alu_res(31 downto 1) & '0') when id_ex.jalr = '1' else 
-               pc_target when pc_src = '1' else 
-               pc_plus_4;
+    -- Trap a MRET mají absolutní prioritu nad čímkoliv jiným!
+    pc_next <=  trap_target                     when trap_fire = '1'     else
+                epc_out                         when id_ex.is_mret = '1' else
+                (ex_alu_res(31 downto 1) & '0') when id_ex.jalr = '1'    else 
+                pc_target                       when pc_src = '1'        else 
+                pc_plus_4;
     
     -- A jako bonus vyvedeme aktuální PC ven z procesoru do Instrukční paměti ROM
     instr_addr <= pc_current;
@@ -329,76 +369,81 @@ begin
                 
                 -- Vynulujeme řídicí signály, aby se nic nezapisovalo
                 id_ex.reg_write  <= '0'; id_ex.mem_write  <= '0';
-					 id_ex.branch		<= '0'; id_ex.jump 		 <= '0';
-                id_ex.jalr 		<= '0'; ex_mem.reg_write <= '0'; 
-					 ex_mem.mem_write <= '0'; mem_wb.reg_write <= '0';
+                id_ex.branch     <= '0'; id_ex.jump       <= '0';
+                id_ex.jalr 	     <= '0'; id_ex.csr_cmd    <= "00";
+                id_ex.is_mret    <= '0'; ex_mem.reg_write <= '0'; 
+                ex_mem.mem_write <= '0'; mem_wb.reg_write <= '0';
             else
-					 -- ==========================================================
+                -- ==========================================================
                 -- 1. Posun Program Counteru(pouze pokud nebrzdíme)
-					 -- ==========================================================
-					 if stall_pc = '0' then
-						pc_current <= pc_next;
-					 end if;
-                
-					 -- ==========================================================
+                -- ==========================================================
+                if stall_pc = '0' then
+                    pc_current <= pc_next;
+                end if;
+
+                -- ==========================================================
                 -- 2. PŘEKLOPENÍ DO FÁZE IF/ID (S možností výmazu)
                 -- ==========================================================
-                if flush_if_id = '1' then
+                if (flush_if_id = '1') or (trap_fire = '1') or (id_ex.is_mret = '1') then
                     if_id.instr <= (others => '0'); -- NOP instrukce
                     if_id.pc    <= (others => '0');
                 elsif stall_if_id = '0' then -- Zápis pouze pokud nebrzdíme 
                     if_id.pc    <= pc_current;
                     if_id.instr <= instr_data;
                 end if;
-                
+
                 -- ==========================================================
                 -- 3. PŘEKLOPENÍ DO FÁZE ID/EX (S možností výmazu)
                 -- ==========================================================
-                if flush_id_ex = '1' then
+                if (flush_id_ex = '1') or (trap_fire = '1') or (id_ex.is_mret = '1') then
                     -- Zabijeme řídicí signály, data můžou zůstat jaká chtějí, nic se nestane
                     id_ex.reg_write <= '0';
                     id_ex.mem_write <= '0';
                     id_ex.branch    <= '0';
                     id_ex.jump      <= '0';
-						  id_ex.res_src   <= "00";
+                    id_ex.res_src   <= "00";
                     id_ex.rd_addr   <= "00000";
+                    id_ex.csr_cmd   <= "00";
+                    id_ex.is_mret   <= '0';
                 else
-					 -- Komplexní překlopení dat a řídicích signálů
+                    -- Komplexní překlopení dat a řídicích signálů
                     id_ex.pc         <= if_id.pc;
-						  id_ex.funct3		 <= if_id.instr(14 downto 12);
+                    id_ex.funct3     <= if_id.instr(14 downto 12);
                     id_ex.reg_data1  <= id_rd_data1;
                     id_ex.reg_data2  <= id_rd_data2;
                     id_ex.imm        <= id_imm_ext;
                     id_ex.rs1_addr   <= if_id.instr(19 downto 15);
                     id_ex.rs2_addr   <= if_id.instr(24 downto 20);
                     id_ex.rd_addr    <= if_id.instr(11 downto 7);
+                    id_ex.csr_cmd    <= id_csr_cmd;
+                    id_ex.is_mret    <= id_is_mret;
                     
                     id_ex.reg_write  <= id_reg_write;
                     id_ex.res_src    <= id_res_src;
                     id_ex.mem_write  <= id_mem_write;
                     id_ex.branch     <= id_branch;
                     id_ex.jump       <= id_jump;
-						  id_ex.jalr       <= id_jalr;
+                    id_ex.jalr       <= id_jalr;
                     id_ex.alu_src_a  <= id_alu_src_a;
                     id_ex.alu_ctrl   <= id_alu_ctrl;
                     id_ex.alu_src    <= id_alu_src;
                     -- ... atd.
                 end if;
 
-                
                 -- ==========================================================
                 -- 4. FÁZE EX/MEM
                 -- ==========================================================
                 ex_mem.alu_res   <= ex_alu_res;
                 ex_mem.wr_data   <= alu_src_b_fw; -- Data chráněná proti hazardům.
                 ex_mem.rd_addr   <= id_ex.rd_addr;
+                ex_mem.csr_rdata <= ex_csr_rdata; -- Data přečtená z CSR posíláme dál
                 
                 ex_mem.reg_write <= id_ex.reg_write;
                 ex_mem.res_src   <= id_ex.res_src;
                 ex_mem.mem_write <= id_ex.mem_write;
-					 
-					 ex_mem.pc_plus_4 <= std_logic_vector(unsigned(id_ex.pc) + 4); -- Návratová adresa do paměťové fáze
-					 ex_mem.funct3    <= id_ex.funct3; 
+                
+                ex_mem.pc_plus_4 <= std_logic_vector(unsigned(id_ex.pc) + 4); -- Návratová adresa do paměťové fáze
+                ex_mem.funct3    <= id_ex.funct3; 
 
                 -- ==========================================================
                 -- 5. FÁZE MEM/WB
@@ -406,11 +451,12 @@ begin
                 mem_wb.alu_res    <= ex_mem.alu_res;
                 mem_wb.mem_data  <= mem_rd_data_fmt;
                 mem_wb.rd_addr    <= ex_mem.rd_addr;
+                mem_wb.csr_rdata <= ex_mem.csr_rdata; -- Data se blíží k cílovému registru
                 
                 mem_wb.reg_write  <= ex_mem.reg_write;
                 mem_wb.res_src    <= ex_mem.res_src;
-					 
-					 mem_wb.pc_plus_4  <= ex_mem.pc_plus_4;
+                
+                mem_wb.pc_plus_4  <= ex_mem.pc_plus_4;
             end if;
         end if;
     end process;

@@ -8,6 +8,7 @@ entity control_unit is
         opcode    : in  std_logic_vector(6 downto 0);  -- Bity 6:0
         funct3    : in  std_logic_vector(2 downto 0);  -- Bity 14:12
         funct7_b5 : in  std_logic;                     -- Bit 30 (5. bit z funct7)
+        funct12   : in  std_logic_vector(11 downto 0); -- Horních 12 bitů pro detekci MRET
         
         -- Výstupy pro Datovou cestu (Main Decoder)
         reg_write : out std_logic;                     -- 1 = Zápis do reg. pole
@@ -17,11 +18,15 @@ entity control_unit is
         res_src   : out std_logic_vector(1 downto 0);  -- Co se zapíše do reg: 00=ALU, 01=RAM, 10=PC+4
         branch    : out std_logic;                     -- 1 = Je to podmíněný skok
         jump      : out std_logic;                     -- 1 = Je to nepodmíněný skok (JAL)
-		  jalr      : out std_logic;                     -- 1 = Jedná se o skok přes registr (JALR)
+        jalr      : out std_logic;                     -- 1 = Jedná se o skok přes registr (JALR)
         alu_src_a : out std_logic;                     -- 0 = rs1, 1 = PC (pro AUIPC)
         
         -- Výstup pro ALU (ALU Decoder)
-        alu_ctrl  : out std_logic_vector(3 downto 0)
+        alu_ctrl  : out std_logic_vector(3 downto 0);
+
+        -- Výstupy pro CSR jednotku
+        csr_cmd   : out std_logic_vector(1 downto 0);  -- 00=Nic, 01=RW, 10=RS, 11=RC
+        is_mret   : out std_logic                      -- 1 = Návrat z přerušení
     );
 end entity control_unit;
 
@@ -33,7 +38,7 @@ begin
     -- ========================================================================
     -- 1. HLAVNÍ DEKODÉR (Závisí pouze na OPCODE)
     -- ========================================================================
-    process(opcode)
+    process(opcode, funct3, funct12)
     begin
         -- Výchozí hodnoty (prevence proti nechtěným paměťovým zápisům)
         reg_write <= '0';
@@ -44,9 +49,11 @@ begin
         branch    <= '0';
         jump      <= '0';
         alu_op    <= "00"; 
-		  jalr		<= '0';
-		  alu_src_a <= '0';
-        
+        jalr      <= '0';
+        alu_src_a <= '0';
+        csr_cmd   <= "00"; -- Výchozí: s CSR se nepracuje
+        is_mret   <= '0';  -- Výchozí: není to návrat
+
         case opcode is
             when OPC_OP => -- R-Type instrukce (např. ADD, SUB, AND)
                 reg_write <= '1';
@@ -107,8 +114,31 @@ begin
                 alu_op    <= "00";  -- ALU sečte rs1 + imm (výpočet cíle skoku)
                 res_src   <= "10";  -- Do registru zapíšeme Návratovou adresu (PC+4)
                 
+            -- ====================================================================
+            -- SYSTÉMOVÉ INSTRUKCE A CSR (Opcode 1110011)
+            -- ====================================================================
+            when OPC_SYSTEM => 
+                if funct3 = "000" then
+                    -- Pod-dekódování pro MRET, ECALL, EBREAK (zajímá nás MRET)
+                    if funct12 = x"302" then
+                        is_mret <= '1';
+                    end if;
+                else
+                    -- Standardní CSR instrukce (CSRRW, CSRRS, CSRRC)
+                    reg_write <= '1';  -- Vždy čteme původní stav CSR do našeho rd registru
+                    res_src   <= "11"; -- Přikážeme datové cestě: "Ulož do rd data z CSR!"
+                    
+                    if funct3 = "001" then
+                        csr_cmd <= "01"; -- Zápis nového stavu
+                    elsif funct3 = "010" then
+                        csr_cmd <= "10"; -- Nastavení bitů (Set)
+                    elsif funct3 = "011" then
+                        csr_cmd <= "11"; -- Nulování bitů (Clear)
+                    end if;
+                end if;
+
             when others =>
-                -- Ostatní instrukce (JAL, LUI, atd.) doplníme později, aby kód nebyl obří
+                -- Ostatní instrukce
                 null;
         end case;
     end process;
@@ -140,12 +170,12 @@ begin
                         end if;
                         
                     when "010" => alu_ctrl <= "1000"; -- SLT (Set Less Than)
-						  when "011" => alu_ctrl <= "1001"; -- SLTU
-						  when "100" => alu_ctrl <= "0100"; -- XOR
+                    when "011" => alu_ctrl <= "1001"; -- SLTU
+                    when "100" => alu_ctrl <= "0100"; -- XOR
                     when "110" => alu_ctrl <= "0011"; -- OR
                     when "111" => alu_ctrl <= "0010"; -- AND
                     when "001" => alu_ctrl <= "0101"; -- SLL
-						  when "101" => 
+                    when "101" => 
                         if funct7_b5 = '1' then
                             alu_ctrl <= "0111"; -- SRA
                         else

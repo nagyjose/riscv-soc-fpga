@@ -15,13 +15,13 @@ entity hazard_unit is
         -- Co se právě zapisuje ve fázi WB (úplný konec)?
         rd_addr_wb  : in std_logic_vector(4 downto 0);
         reg_wr_wb   : in std_logic;
-		  
-		  -- 2. Vstupy pro detekci Load-Use Hazardu (čtení z ID fáze)
+        
+        -- 2. Vstupy pro detekci Load-Use Hazardu (čtení z ID fáze)
         rs1_addr_id : in std_logic_vector(4 downto 0);
         rs2_addr_id : in std_logic_vector(4 downto 0);
         rd_addr_ex  : in std_logic_vector(4 downto 0);
         res_src_ex  : in std_logic_vector(1 downto 0); -- Zda EX instrukce čte z RAM ("01")
-
+        
         -- 3. Vstup pro detekci Skoků (Flushing)
         pc_src      : in std_logic;
 
@@ -30,10 +30,10 @@ entity hazard_unit is
         forward_a   : out std_logic_vector(1 downto 0); 
         forward_b   : out std_logic_vector(1 downto 0);
         
-		  -- Výstupy pro zastavení času (Stall)
+        -- Výstupy pro zastavení času (Stall)
         stall_pc    : out std_logic;
         stall_if_id : out std_logic;
-		  
+        
         -- 1 = Smaž obsah těchto pipeline registrů
         flush_if_id : out std_logic;
         flush_id_ex : out std_logic
@@ -41,7 +41,7 @@ entity hazard_unit is
 end entity hazard_unit;
 
 architecture rtl of hazard_unit is
-	 signal lw_stall : std_logic;
+    signal lw_stall : std_logic;
 begin
 
     -- ========================================================================
@@ -77,8 +77,8 @@ begin
             forward_b <= "00";
         end if;
     end process;
-	 
-	 -- ========================================================================
+
+    -- ========================================================================
     -- Detekce Load-Use Hazardu (Záchranná brzda)
     -- ========================================================================
     process(res_src_ex, rd_addr_ex, rs1_addr_id, rs2_addr_id)
@@ -92,8 +92,8 @@ begin
             lw_stall <= '0';
         end if;
     end process;
-	 
-	 -- ========================================================================
+
+    -- ========================================================================
     -- Směrování signálů
     -- ========================================================================
     -- Když brzdíme, nesmíme přepisovat PC ani registr IF/ID (držíme je na místě)
@@ -106,7 +106,7 @@ begin
     -- Pokud zjistíme skok (pc_src = '1'), smažeme rozpracované instrukce,
     -- které do pipeline omylem natekly.
     flush_if_id <= pc_src;
-	 -- ID/EX mažeme buď kvůli skoku, nebo kvůli vložení NOPu při brzdění (Stall)!
+    -- ID/EX mažeme buď kvůli skoku, nebo kvůli vložení NOPu při brzdění (Stall)!
     flush_id_ex <= pc_src or lw_stall;
 
 end architecture rtl;
