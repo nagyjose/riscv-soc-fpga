@@ -113,6 +113,7 @@ architecture rtl of datapath is
     signal id_rd_data2  : std_logic_vector(31 downto 0);
     signal id_csr_cmd   : std_logic_vector(1 downto 0);
     signal id_is_mret   : std_logic;
+    signal id_md_req    : std_logic;
     
     -- Vstupy pro ALU ve fázi EX
     signal ex_alu_src_a : std_logic_vector(31 downto 0);
@@ -172,7 +173,7 @@ begin
         port map (
             opcode    => if_id.instr(6 downto 0),
             funct3    => if_id.instr(14 downto 12),
-            funct7_b5 => if_id.instr(30),
+            funct7    => if_id.instr(31 downto 25),
             funct12   => if_id.instr(31 downto 20),
             
             reg_write => id_reg_write,
@@ -186,7 +187,8 @@ begin
             alu_src_a => id_alu_src_a,
             alu_ctrl  => id_alu_ctrl,
             csr_cmd   => id_csr_cmd, 
-            is_mret   => id_is_mret 
+            is_mret   => id_is_mret,
+            md_req    => id_md_req
         );
 
     -- 2. Generátor konstant
