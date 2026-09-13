@@ -24,6 +24,9 @@ entity hazard_unit is
         
         -- 3. Vstup pro detekci Skoků (Flushing)
         pc_src      : in std_logic;
+        
+        -- 4. Signál z M/D jednotky
+        md_ready    : in std_logic; 
 
         -- Výstupy pro Datovou cestu
         -- 00 = normální čtení, 10 = zkratka z MEM, 01 = zkratka z WB
@@ -33,15 +36,18 @@ entity hazard_unit is
         -- Výstupy pro zastavení času (Stall)
         stall_pc    : out std_logic;
         stall_if_id : out std_logic;
+        stall_id_ex : out std_logic;
         
         -- 1 = Smaž obsah těchto pipeline registrů
         flush_if_id : out std_logic;
-        flush_id_ex : out std_logic
+        flush_id_ex : out std_logic;
+        flush_ex_mem: out std_logic
     );
 end entity hazard_unit;
 
 architecture rtl of hazard_unit is
     signal lw_stall : std_logic;
+    signal md_stall : std_logic;
 begin
 
     -- ========================================================================
@@ -94,11 +100,16 @@ begin
     end process;
 
     -- ========================================================================
-    -- Směrování signálů
+    -- Směrování signálů pro STALL a FLUSH
     -- ========================================================================
+    md_stall <= not md_ready; -- Brzdíme, pokud jednotka není hotová
+    
     -- Když brzdíme, nesmíme přepisovat PC ani registr IF/ID (držíme je na místě)
-    stall_pc    <= lw_stall;
-    stall_if_id <= lw_stall;
+    stall_pc    <= lw_stall or md_stall;
+    stall_if_id <= lw_stall or md_stall;
+    
+    -- Instrukce musí zůstat viset ve fázi EX, dokud dělička neřekne "hotovo"
+    stall_id_ex <= md_stall;
 
     -- ========================================================================
     -- LOGIKA PRO MAZÁNÍ PŘI SKOKU (Flushing)
@@ -106,7 +117,12 @@ begin
     -- Pokud zjistíme skok (pc_src = '1'), smažeme rozpracované instrukce,
     -- které do pipeline omylem natekly.
     flush_if_id <= pc_src;
-    -- ID/EX mažeme buď kvůli skoku, nebo kvůli vložení NOPu při brzdění (Stall)!
+
+    -- ID/EX mažeme buď kvůli skoku, nebo kvůli vložení NOPu při brzdění (Stall), ale ne během dělení
+    -- (Při dělení instrukci držíme, nemažeme ji)
     flush_id_ex <= pc_src or lw_stall;
+    
+    -- Pokud je EX fáze zmrazená, musíme dolů do paměti posílat prázdné NOPy
+    flush_ex_mem <= md_stall;
 
 end architecture rtl;

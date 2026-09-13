@@ -26,7 +26,7 @@ entity control_unit is
 
         -- Výstupy pro CSR jednotku
         csr_cmd   : out std_logic_vector(1 downto 0);  -- 00=Nic, 01=RW, 10=RS, 11=RC
-        is_mret   : out std_logic                      -- 1 = Návrat z přerušení
+        is_mret   : out std_logic;                     -- 1 = Návrat z přerušení
         md_req    : out std_logic                      -- 1 = Jde o násobení/dělení (M-Extension)
     );
 end entity control_unit;

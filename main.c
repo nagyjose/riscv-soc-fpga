@@ -1,83 +1,65 @@
 #define MAGIC_ADDR *((volatile unsigned int *)0xFFFFFFFC)
 
-// Nahlášení chyby (např. 0xDEAD0001)
 void fail(int test_id) {
     MAGIC_ADDR = 0xDEAD0000 | test_id;
     while(1);
 }
 
-// Nahlášení úspěchu
 void pass() {
     MAGIC_ADDR = 1;
     while(1);
 }
 
 int main() {
-    unsigned int read_val;
+    int a, b, res;
+    unsigned int ua, ub, ures;
 
     // ========================================================================
-    // TEST 1: Zápis a čtení registru MTVEC (Adresa 0x305)
+    // TEST 1: Běžné násobení (MUL)
     // ========================================================================
-    unsigned int mtvec_test_val = 0x00001000;
-    __asm__ volatile (
-        "csrw 0x305, %1\n\t"    // Zapiš hodnotu mtvec_test_val do registru 0x305
-        "csrr %0, 0x305\n\t"    // Přečti registr 0x305 zpět do read_val
-        : "=r" (read_val)
-        : "r" (mtvec_test_val)
-    );
-    if (read_val != mtvec_test_val) fail(1);
+    a = 21; b = 2;
+    __asm__ volatile ("mul %0, %1, %2" : "=r"(res) : "r"(a), "r"(b));
+    if (res != 42) fail(1);
 
     // ========================================================================
-    // TEST 2: Zápis a čtení registru MEPC (Adresa 0x341)
+    // TEST 2: Znaménkové násobení s přetečením (MULH)
     // ========================================================================
-    unsigned int mepc_test_val = 0x00002004;
-    __asm__ volatile (
-        "csrw 0x341, %1\n\t"
-        "csrr %0, 0x341\n\t"
-        : "=r" (read_val)
-        : "r" (mepc_test_val)
-    );
-    if (read_val != mepc_test_val) fail(2);
+    // 2 000 000 000 * 3 = 6 000 000 000. Do 32 bitů se vejde max ~2.14 mld.
+    // 6 000 000 000 v hex je 0x00000001_65A0BC00. Horní polovina je přesně 1.
+    a = 2000000000; b = 3;
+    __asm__ volatile ("mulh %0, %1, %2" : "=r"(res) : "r"(a), "r"(b));
+    if (res != 1) fail(2);
 
     // ========================================================================
-    // TEST 3: Bitové operace nad MSTATUS (Adresa 0x300)
-    // Testujeme instrukce CSRRS (Set) a CSRRC (Clear) na bitu 3 (MIE)
+    // TEST 3: Znaménkové dělení a modulo (DIV, REM)
     // ========================================================================
-    
-    // A) Nastavení bitu 3 (Hodnota 8) pomocí masky
-    __asm__ volatile (
-        "li t1, 8\n\t"            // Maska pro bit 3
-        "csrrs x0, 0x300, t1\n\t" // Nastav bit (Set). Výsledek čtení zahodíme do x0.
-        "csrr %0, 0x300\n\t"      // Přečteme nový stav
-        : "=r" (read_val)
-        : : "t1"
-    );
-    if (read_val != 8) fail(3);
+    a = -20; b = 3;
+    __asm__ volatile ("div %0, %1, %2" : "=r"(res) : "r"(a), "r"(b));
+    if (res != -6) fail(3);
 
-    // B) Vynulování bitu 3 pomocí masky
-    __asm__ volatile (
-        "li t1, 8\n\t"
-        "csrrc x0, 0x300, t1\n\t" // Vymaž bit (Clear)
-        "csrr %0, 0x300\n\t"
-        : "=r" (read_val)
-        : : "t1"
-    );
-    if (read_val != 0) fail(4);
+    __asm__ volatile ("rem %0, %1, %2" : "=r"(res) : "r"(a), "r"(b));
+    if (res != -2) fail(4); // Zbytek musí mít stejné znaménko jako dělenec
 
     // ========================================================================
-    // TEST 4: Ochrana proti neexistujícím registrům
+    // TEST 4: Neznaménkové dělení (DIVU)
     // ========================================================================
-    __asm__ volatile (
-        "li t1, 0xFFFFFFFF\n\t"
-        "csrw 0x999, t1\n\t"      // Zápis do neplatné adresy (Měl by se potichu zahodit)
-        "csrr %0, 0x999\n\t"      // Čtení z neplatné adresy (Mělo by vrátit 0)
-        : "=r" (read_val)
-        : : "t1"
-    );
-    if (read_val != 0) fail(5);
+    ua = 4000000000U; ub = 2U;
+    __asm__ volatile ("divu %0, %1, %2" : "=r"(ures) : "r"(ua), "r"(ub));
+    if (ures != 2000000000U) fail(5);
 
-    // Pokud program dojde až sem, CPU umí Zicsr!
+    // ========================================================================
+    // TEST 5: Architektonická past RISC-V - Dělení nulou
+    // ========================================================================
+    a = 42; b = 0;
+    // RISC-V nevyhazuje výjimku, ale nařizuje podíl nastavit na -1 (všechny bity na 1)
+    __asm__ volatile ("div %0, %1, %2" : "=r"(res) : "r"(a), "r"(b));
+    if (res != -1) fail(6); 
+
+    // Zbytek po dělení nulou musí být původní dělenec
+    __asm__ volatile ("rem %0, %1, %2" : "=r"(res) : "r"(a), "r"(b));
+    if (res != 42) fail(7); 
+
+    // Pokud CPU (a naše stall logika) vše přežije bez ztráty taktu, zahlásíme úspěch
     pass();
-    
     return 0;
 }

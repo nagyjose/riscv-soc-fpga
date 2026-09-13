@@ -53,7 +53,8 @@ architecture rtl of datapath is
         jalr       : std_logic;                    
         alu_src_a  : std_logic;  
         csr_cmd    : std_logic_vector(1 downto 0);
-        is_mret    : std_logic;                  
+        is_mret    : std_logic; 
+        md_req     : std_logic;                 
     end record;
 
     -- 3. Fáze EX/MEM (Mezi ALU a Datovou RAM)
@@ -142,16 +143,23 @@ architecture rtl of datapath is
     signal forward_b    : std_logic_vector(1 downto 0);
     signal flush_if_id  : std_logic;
     signal flush_id_ex  : std_logic;
+    signal flush_ex_mem : std_logic;
 
-    signal stall_pc	   : std_logic;
+    signal stall_pc	    : std_logic;
     signal stall_if_id  : std_logic;
+    signal stall_id_ex  : std_logic;
     
     -- Mezisignály pro vstupy do ALU (po aplikování zkratky)
     signal alu_src_a_fw : std_logic_vector(31 downto 0);
     signal alu_src_b_fw : std_logic_vector(31 downto 0);
 
     -- Signál pro upravená data načtená z RAM
-    signal mem_rd_data_fmt: std_logic_vector(31 downto 0);
+    signal mem_rd_data_fmt : std_logic_vector(31 downto 0);
+
+    -- Signály pro M-rozšíření
+    signal md_res       : std_logic_vector(31 downto 0);
+    signal md_ready     : std_logic;
+    signal ex_result    : std_logic_vector(31 downto 0); -- Výsledek, co reálně opouští EX
 
 begin
 
@@ -221,28 +229,29 @@ begin
     -- ========================================================================
     u_hazard_unit: entity work.hazard_unit
         port map (
-            rs1_addr_ex => id_ex.rs1_addr,
-            rs2_addr_ex => id_ex.rs2_addr,
-            rd_addr_mem => ex_mem.rd_addr,
-            reg_wr_mem  => ex_mem.reg_write,
-            rd_addr_wb  => mem_wb.rd_addr,
-            reg_wr_wb   => mem_wb.reg_write,
+            rs1_addr_ex  => id_ex.rs1_addr,
+            rs2_addr_ex  => id_ex.rs2_addr,
+            rd_addr_mem  => ex_mem.rd_addr,
+            reg_wr_mem   => ex_mem.reg_write,
+            rd_addr_wb   => mem_wb.rd_addr,
+            reg_wr_wb    => mem_wb.reg_write,
             
-            rs1_addr_id => if_id.instr(19 downto 15),
-            rs2_addr_id => if_id.instr(24 downto 20),
-            rd_addr_ex  => id_ex.rd_addr,
-            res_src_ex  => id_ex.res_src,
+            rs1_addr_id  => if_id.instr(19 downto 15),
+            rs2_addr_id  => if_id.instr(24 downto 20),
+            rd_addr_ex   => id_ex.rd_addr,
+            res_src_ex   => id_ex.res_src,
             
-            pc_src      => pc_src,
+            pc_src       => pc_src,
             
-            forward_a   => forward_a,
-            forward_b   => forward_b,
-            stall_pc    => stall_pc,
-            stall_if_id => stall_if_id,
-            flush_if_id => flush_if_id,
-            flush_id_ex => flush_id_ex
-            
-            -- (nezapomeň tyto nové signály nahoře definovat jako `signal stall_pc, stall_if_id : std_logic;`)
+            forward_a    => forward_a,
+            forward_b    => forward_b,
+            stall_pc     => stall_pc,
+            stall_if_id  => stall_if_id,
+            stall_id_ex  => stall_id_ex,
+            flush_if_id  => flush_if_id,
+            flush_id_ex  => flush_id_ex,
+            flush_ex_mem => flush_ex_mem,
+            md_ready     => md_ready
         );
 
     -- 0. Zjištění skutečného výsledku z fáze MEM (pro zkratky)
@@ -287,6 +296,22 @@ begin
             jump     => id_ex.jump,
             pc_src   => pc_src
         );
+
+    -- 6. M-rozšíření (Násobička/dělička)
+    u_mult_div: entity work.mult_div_unit
+        port map (
+            clk      => clk,
+            rst      => rst,
+            md_req   => id_ex.md_req,     -- Ten nový signál z dekodéru
+            funct3   => id_ex.funct3,
+            src_a    => ex_alu_src_a,     -- Ošetřeno forwardováním!
+            src_b    => ex_alu_src_b,
+            md_res   => md_res,
+            md_ready => md_ready
+        );
+
+    -- 7. Multiplexer na konci fáze EX: Standardní ALU vs. Násobička/Dělička
+    ex_result <= md_res when id_ex.md_req = '1' else ex_alu_res;
 
     -- ========================================================================
     -- JEDNOTKA ŘÍDICÍCH REGISTRŮ (CSR Unit) - Fáze EX
@@ -414,7 +439,8 @@ begin
                     id_ex.rd_addr   <= "00000";
                     id_ex.csr_cmd   <= "00";
                     id_ex.is_mret   <= '0';
-                else
+                    id_ex.md_req    <= '0';
+                elsif stall_id_ex = '0' then
                     -- Komplexní překlopení dat a řídicích signálů
                     id_ex.pc         <= if_id.pc;
                     id_ex.funct3     <= if_id.instr(14 downto 12);
@@ -436,31 +462,38 @@ begin
                     id_ex.alu_src_a  <= id_alu_src_a;
                     id_ex.alu_ctrl   <= id_alu_ctrl;
                     id_ex.alu_src    <= id_alu_src;
+                    id_ex.md_req     <= id_md_req;
                     -- ... atd.
                 end if;
 
                 -- ==========================================================
                 -- 4. FÁZE EX/MEM
                 -- ==========================================================
-                ex_mem.alu_res   <= ex_alu_res;
-                ex_mem.wr_data   <= alu_src_b_fw; -- Data chráněná proti hazardům.
-                ex_mem.rd_addr   <= id_ex.rd_addr;
-                ex_mem.csr_rdata <= ex_csr_rdata; -- Data přečtená z CSR posíláme dál
-                
-                ex_mem.reg_write <= id_ex.reg_write;
-                ex_mem.res_src   <= id_ex.res_src;
-                ex_mem.mem_write <= id_ex.mem_write;
-                
-                ex_mem.pc_plus_4 <= std_logic_vector(unsigned(id_ex.pc) + 4); -- Návratová adresa do paměťové fáze
-                ex_mem.funct3    <= id_ex.funct3; 
+                if flush_ex_mem = '1' then
+                    ex_mem.reg_write <= '0';
+                    ex_mem.mem_write <= '0';
+                else
+                    ex_mem.alu_res   <= ex_result;
+                    ex_mem.wr_data   <= alu_src_b_fw; -- Data chráněná proti hazardům.
+                    ex_mem.rd_addr   <= id_ex.rd_addr;
+                    ex_mem.csr_rdata <= ex_csr_rdata; -- Data přečtená z CSR posíláme dál
+                    
+                    ex_mem.reg_write <= id_ex.reg_write;
+                    ex_mem.res_src   <= id_ex.res_src;
+                    ex_mem.mem_write <= id_ex.mem_write;
+                    
+                    ex_mem.pc_plus_4 <= std_logic_vector(unsigned(id_ex.pc) + 4); -- Návratová adresa do paměťové fáze
+                    ex_mem.funct3    <= id_ex.funct3;
+                    ex_mem.csr_rdata <= ex_csr_rdata;
+                end if;
 
                 -- ==========================================================
                 -- 5. FÁZE MEM/WB
                 -- ==========================================================
                 mem_wb.alu_res    <= ex_mem.alu_res;
-                mem_wb.mem_data  <= mem_rd_data_fmt;
+                mem_wb.mem_data   <= mem_rd_data_fmt;
                 mem_wb.rd_addr    <= ex_mem.rd_addr;
-                mem_wb.csr_rdata <= ex_mem.csr_rdata; -- Data se blíží k cílovému registru
+                mem_wb.csr_rdata  <= ex_mem.csr_rdata; -- Data se blíží k cílovému registru
                 
                 mem_wb.reg_write  <= ex_mem.reg_write;
                 mem_wb.res_src    <= ex_mem.res_src;
