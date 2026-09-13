@@ -119,8 +119,9 @@ architecture rtl of datapath is
     signal ex_alu_src_b : std_logic_vector(31 downto 0);
     signal ex_alu_res   : std_logic_vector(31 downto 0);
 
-    -- Multiplexer pro Write-Back fázi (co se zapisuje do registru)
+    -- Multiplexery pro zkratky (Co se reálně vypočítalo v dané fázi)
     signal wb_result    : std_logic_vector(31 downto 0);
+    signal mem_result   : std_logic_vector(31 downto 0);
 
     -- Signály pro výpočet adresy další instrukce
     signal pc_plus_4 : std_logic_vector(31 downto 0);
@@ -242,13 +243,19 @@ begin
             -- (nezapomeň tyto nové signály nahoře definovat jako `signal stall_pc, stall_if_id : std_logic;`)
         );
 
+    -- 0. Zjištění skutečného výsledku z fáze MEM (pro zkratky)
+    -- Poznámka: res_src="01" (Load z RAM) tu není, protože paměť má vždy Load-Use stall (1 takt)
+    mem_result <= ex_mem.pc_plus_4 when ex_mem.res_src = "10" else -- Návratová adresa JAL
+                  ex_mem.csr_rdata when ex_mem.res_src = "11" else -- Přečtená data z CSR
+                  ex_mem.alu_res;                                  -- Běžný výpočet
+
     -- 1. Zkratka pro Operand A
-    alu_src_a_fw <= ex_mem.alu_res when forward_a = "10" else -- Zkratka z fáze MEM
+    alu_src_a_fw <= mem_result     when forward_a = "10" else -- Zkratka z fáze MEM
                     wb_result      when forward_a = "01" else -- Zkratka z fáze WB
                     id_ex.reg_data1;                          -- Normální čtení z registru
 
     -- 2. Zkratka pro Operand B (před rozhodnutím o konstantě!)
-    alu_src_b_fw <= ex_mem.alu_res when forward_b = "10" else
+    alu_src_b_fw <= mem_result     when forward_b = "10" else
                     wb_result      when forward_b = "01" else
                     id_ex.reg_data2;
 
