@@ -33,6 +33,7 @@ architecture rtl of csr_unit is
     signal mstatus_mie : std_logic;                       -- Master spínač přerušení (Bit 3 v MSTATUS)
     signal mtvec       : std_logic_vector(31 downto 0);   -- Vektor přerušení (Kam skočit)
     signal mepc        : std_logic_vector(31 downto 0);   -- Návratová adresa (Odkud jsme vyskočili)
+    signal mcause      : std_logic_vector(31 downto 0);   -- Původce přerušení
     
     -- Vnitřní signál pro multiplexer čtení
     signal read_data   : std_logic_vector(31 downto 0);
@@ -51,6 +52,7 @@ begin
             when x"300" => read_data(3) <= mstatus_mie; -- MSTATUS (mapujeme jen bit 3)
             when x"305" => read_data    <= mtvec;       -- MTVEC
             when x"341" => read_data    <= mepc;        -- MEPC
+            when x"342" => read_data    <= mcause;      -- MCAUSE
             when others => null;                        -- Neznámý registr vrací nuly
         end case;
     end process;
@@ -78,9 +80,10 @@ begin
 
                 -- A) HARDWAROVÁ PŘERUŠENÍ (Mají absolutní prioritu)
                 if irq_ext = '1' and mstatus_mie = '1' then
-                    mstatus_mie <= '0';   -- 1. Zablokujeme další přerušení (aby se nezacyklilo)
-                    mepc        <= pc_in; -- 2. Uložíme aktuální PC do mepc
-                    trap_fire   <= '1';   -- 3. Vystřelíme požadavek na zahození pipeliny a skok
+                    mstatus_mie <= '0';         -- 1. Zablokujeme další přerušení (aby se nezacyklilo)
+                    mepc        <= pc_in;       -- 2. Uložíme aktuální PC do mepc
+                    mcause      <= x"8000000B"; -- 3. Hardwarový zápis původu (External Interrupt)
+                    trap_fire   <= '1';         -- 4. Vystřelíme požadavek na zahození pipeliny a skok
 
                 -- B) SOFTWAROVÝ ZÁPIS (Z instrukcí csr_cmd)
                 elsif csr_cmd /= "00" then
@@ -95,6 +98,7 @@ begin
                         when x"300" => mstatus_mie <= temp_write(3);
                         when x"305" => mtvec       <= temp_write;
                         when x"341" => mepc        <= temp_write;
+                        when x"342" => mcause      <= temp_write; -- Softwarový zápis
                         when others => null; -- Zápis do neznámého registru je ticho zahozen
                     end case;
                 end if;
