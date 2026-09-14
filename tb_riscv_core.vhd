@@ -13,6 +13,9 @@ architecture sim of tb_riscv_core is
     signal rst          : std_logic := '1'; -- Začínáme v resetu!
 
     signal gpio_pins    : std_logic_vector(19 downto 0) := (others => 'Z');
+
+    signal uart_rx_pin  : std_logic := '1'; -- Sériová linka je v klidu HIGH
+    signal uart_tx_pin  : std_logic;
     
     signal tb_success   : std_logic;
     signal tb_error_id  : std_logic_vector(15 downto 0);
@@ -30,6 +33,8 @@ begin
             clk         => clk,
             rst         => rst,
             gpio_pins   => gpio_pins,
+            uart_rx_pin => uart_rx_pin,
+            uart_tx_pin => uart_tx_pin,
             tb_success  => tb_success,
             tb_error_id => tb_error_id
         );
@@ -77,7 +82,25 @@ begin
         rst <= '0';
         
         -- 2. Počkáme 500 ns, aby měl C kód čas nabootovat a nastavit registry
-        wait for 15 us;      
+        wait for 20 us;      
+        
+        -- ==========================================
+        -- TEST PŘIJÍMAČE: Pošleme procesoru znak 'X' (0x58 = 01011000 binárně)
+        -- LSB první -> pošleme: Start(0), 0,0,0,1,1,0,1,0, Stop(1)
+        -- ==========================================
+        -- Rychlost bitu je 100 ns (protože v C nastavíme UART_BAUD na 10)
+        uart_rx_pin <= '0'; wait for 100 ns; -- Start bit
+        uart_rx_pin <= '0'; wait for 100 ns; -- Bit 0 (LSB)
+        uart_rx_pin <= '0'; wait for 100 ns; -- Bit 1
+        uart_rx_pin <= '0'; wait for 100 ns; -- Bit 2
+        uart_rx_pin <= '1'; wait for 100 ns; -- Bit 3
+        uart_rx_pin <= '1'; wait for 100 ns; -- Bit 4
+        uart_rx_pin <= '0'; wait for 100 ns; -- Bit 5
+        uart_rx_pin <= '1'; wait for 100 ns; -- Bit 6
+        uart_rx_pin <= '0'; wait for 100 ns; -- Bit 7 (MSB)
+        uart_rx_pin <= '1'; wait for 100 ns; -- Stop bit
+        
+        wait for 5 us;
         
         -- ==========================================
         -- PRVNÍ STISK TLAČÍTKA (Očekáváme IRQ 1)

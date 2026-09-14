@@ -7,9 +7,14 @@ entity riscv_core is
         clk : in std_logic;
         rst : in std_logic;
         
+        -- GPIO piny
         gpio_pins    : inout std_logic_vector(19 downto 0);
+
+        -- UART piny
+        uart_rx_pin  : in  std_logic;
+        uart_tx_pin  : out std_logic;
         
-        -- NAŠE PRVNÍ PERIFERIE: Výstup pro Testbench
+        -- Výstup pro Testbench
         tb_success   : out std_logic;
         tb_error_id  : out std_logic_vector(15 downto 0)
     );
@@ -42,6 +47,15 @@ architecture rtl of riscv_core is
     signal timer_irq        : std_logic;
     signal timer_wr_en      : std_logic;
 
+    -- Signály pro UART
+    signal uart_rd_data     : std_logic_vector(31 downto 0);
+    signal uart_cs          : std_logic;
+    signal uart_irq         : std_logic;
+    signal uart_wr_en       : std_logic;
+
+    -- Centrální linka pro externí přerušení (Kód 11)
+    signal shared_irq_ext   : std_logic;
+
 begin
 
     -- ========================================================================
@@ -54,6 +68,7 @@ begin
         ram_byte_ena    <= "0000";
         gpio_cs         <= '0';
         timer_cs        <= '0';
+        uart_cs         <= '0';
         cpu_mem_rd_data <= (others => '0');
         tb_success      <= '0';
         tb_error_id     <= (others => '0');
@@ -71,12 +86,17 @@ begin
                 tb_error_id <= cpu_mem_wr_data(15 downto 0);
             end if;
 
-        -- C) GPIO Port (0x4000XXXX)
-        elsif cpu_mem_addr(31 downto 28) = x"4" then
+        -- C) GPIO Port (0x40000000)
+        elsif cpu_mem_addr(31 downto 12) = x"40000" then
             gpio_cs <= '1';
             cpu_mem_rd_data <= gpio_rd_data;
 
-        -- D) Systémový časovač MTIME (0x8000XXXX)
+        -- D) UART Port (0x40001000)
+        elsif cpu_mem_addr(31 downto 12) = x"40001" then
+            uart_cs <= '1';
+            cpu_mem_rd_data <= uart_rd_data;
+
+        -- E) Systémový časovač MTIME (0x8000XXXX)
         elsif cpu_mem_addr(31 downto 28) = x"8" then
             timer_cs <= '1';
             cpu_mem_rd_data <= timer_rd_data;
@@ -98,9 +118,12 @@ begin
             mem_wr_data  => cpu_mem_wr_data,
             mem_rd_data  => cpu_mem_rd_data,
             mem_byte_ena => cpu_mem_byte_ena,
-            irq_ext_in   => gpio_irq,
+            irq_ext_in   => shared_irq_ext,
             irq_timer_in => timer_irq
         );
+    
+    -- Logický součet (Pokud křičí GPIO nebo UART, vzbudíme procesor)
+    shared_irq_ext <= gpio_irq or uart_irq;
 
     -- ========================================================================
     -- 3. INSTANTIACE SDÍLENÉ DUAL-PORT PAMĚTI
@@ -147,7 +170,7 @@ begin
     -- 5. INSTANTIACE MTIME ČASOVAČ
     -- ========================================================================
     timer_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
-
+    
     u_mtime: entity work.mtime
         generic map (
             SYS_CLK_FREQ => 100000000, -- 100 MHz
@@ -162,6 +185,26 @@ begin
             wr_data   => cpu_mem_wr_data,
             rd_data   => timer_rd_data,
             timer_irq => timer_irq
+        );
+
+    -- ========================================================================
+    -- 6. INSTANTIACE UART
+    -- ========================================================================
+    uart_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
+    
+    u_uart: entity work.uart
+        port map (
+            clk       => clk,
+            rst       => rst,
+            cs        => uart_cs,
+            wr_en     => uart_wr_en,
+            -- Pro adresy 0x00, 0x04, 0x08 bereme bity 3 a 2
+            addr      => cpu_mem_addr(3 downto 2), 
+            wr_data   => cpu_mem_wr_data,
+            rd_data   => uart_rd_data,
+            irq_out   => uart_irq,
+            rx_pin    => uart_rx_pin,
+            tx_pin    => uart_tx_pin
         );
 
 end architecture rtl;
