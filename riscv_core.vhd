@@ -7,7 +7,7 @@ entity riscv_core is
         clk : in std_logic;
         rst : in std_logic;
         
-        gpio_pins    : inout std_logic_vector(7 downto 0);
+        gpio_pins    : inout std_logic_vector(19 downto 0);
         
         -- NAŠE PRVNÍ PERIFERIE: Výstup pro Testbench
         tb_success   : out std_logic;
@@ -34,6 +34,7 @@ architecture rtl of riscv_core is
     signal gpio_rd_data     : std_logic_vector(31 downto 0);
     signal gpio_cs          : std_logic;
     signal gpio_irq         : std_logic;
+    signal gpio_wr_en       : std_logic;
 
 begin
 
@@ -108,17 +109,19 @@ begin
         );
 
     -- ========================================================================
-    -- 4. INSTANTIACE GPIO PERIFERIE (Omezená na 8 pinů)
+    -- 4. INSTANTIACE GPIO PERIFERIE (Omezená na 20 pinů)
     -- ========================================================================
+    gpio_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
+    
     u_gpio: entity work.gpio
         generic map (
-            PINS => 16 -- Drastická úspora Logických Elementů
+            PINS => 20 -- Úspora LE
         )
         port map (
             clk       => clk,
             rst       => rst,
             cs        => gpio_cs,
-            wr_en     => '1' when cpu_mem_byte_ena /= "0000" else '0',
+            wr_en     => gpio_wr_en,
             addr      => cpu_mem_addr(4 downto 2),
             wr_data   => cpu_mem_wr_data,
             rd_data   => gpio_rd_data,

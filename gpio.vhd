@@ -4,7 +4,7 @@ use ieee.numeric_std.all;
 
 entity gpio is
     generic (
-        PINS : integer := 16 -- Počet fyzických pinů (1 až 32)
+        PINS : integer := 8 -- Počet fyzických pinů (1 až 32)
     );
     port (
         clk       : in  std_logic;
