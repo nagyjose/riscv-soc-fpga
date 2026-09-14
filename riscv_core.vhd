@@ -36,6 +36,12 @@ architecture rtl of riscv_core is
     signal gpio_irq         : std_logic;
     signal gpio_wr_en       : std_logic;
 
+    -- Signály pro MTIME
+    signal timer_rd_data    : std_logic_vector(31 downto 0);
+    signal timer_cs         : std_logic;
+    signal timer_irq        : std_logic;
+    signal timer_wr_en      : std_logic;
+
 begin
 
     -- ========================================================================
@@ -46,6 +52,7 @@ begin
         -- Výchozí stavy (Zabraňují nechtěnému zápisu)
         ram_byte_ena    <= "0000";
         gpio_cs         <= '0';
+        timer_cs        <= '0';
         cpu_mem_rd_data <= (others => '0');
         tb_success      <= '0';
         tb_error_id     <= (others => '0');
@@ -67,7 +74,12 @@ begin
         elsif cpu_mem_addr(31 downto 28) = x"4" then
             gpio_cs <= '1';
             cpu_mem_rd_data <= gpio_rd_data;
-            
+
+        -- D) Systémový časovač MTIME (0x8000XXXX)
+        elsif cpu_mem_addr(31 downto 28) = x"8" then
+            timer_cs <= '1';
+            cpu_mem_rd_data <= timer_rd_data;
+        
         -- Zde v budoucnu přidáme "elsif cpu_mem_addr(31 downto 28) = x"4" pro GPIO!
         end if;
     end process;
@@ -85,7 +97,8 @@ begin
             mem_wr_data  => cpu_mem_wr_data,
             mem_rd_data  => cpu_mem_rd_data,
             mem_byte_ena => cpu_mem_byte_ena,
-            irq_ext_in   => gpio_irq
+            irq_ext_in   => gpio_irq,
+            irq_timer_in => timer_irq
         );
 
     -- ========================================================================
@@ -127,6 +140,27 @@ begin
             rd_data   => gpio_rd_data,
             irq_out   => gpio_irq,
             gpio_pins => gpio_pins
+        );
+
+    -- ========================================================================
+    -- 5. INSTANTIACE MTIME ČASOVAČ
+    -- ========================================================================
+    timer_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
+
+    u_mtime: entity work.mtime
+        generic map (
+            SYS_CLK_FREQ => 100000000, -- 100 MHz
+            TIMER_FREQ   => 1000000    -- 1 MHz (1 tik = 1 us)
+        )
+        port map (
+            clk       => clk,
+            rst       => rst,
+            cs        => timer_cs,
+            wr_en     => timer_wr_en,
+            addr      => cpu_mem_addr(2),
+            wr_data   => cpu_mem_wr_data,
+            rd_data   => timer_rd_data,
+            timer_irq => timer_irq
         );
 
 end architecture rtl;

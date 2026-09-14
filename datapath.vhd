@@ -18,7 +18,8 @@ entity datapath is
         mem_rd_data  : in  std_logic_vector(31 downto 0);
         mem_byte_ena : out std_logic_vector(3 downto 0);
 
-        irq_ext_in   : in  std_logic
+        irq_ext_in   : in  std_logic;
+        irq_timer_in : in  std_logic  -- Vstup pro MTIME přerušení
     );
 end entity datapath;
 
@@ -331,6 +332,7 @@ begin
             
             pc_in       => id_ex.pc,               -- Aktuální PC (kdyby přišlo přerušení)
             irq_ext     => irq_ext_in,             -- IRQ pro GPIO/Timer
+            irq_timer   => irq_timer_in,           -- Signál pro Trap Kód 7
             is_mret     => id_ex.is_mret,
             
             epc_out     => epc_out,

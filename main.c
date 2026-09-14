@@ -2,18 +2,34 @@
 #define GPIO_DATA      *((volatile unsigned int *)0x40000000)
 #define GPIO_DIR       *((volatile unsigned int *)0x40000004)
 #define GPIO_IRQ_MASK  *((volatile unsigned int *)0x40000008)
-#define GPIO_IRQ_EDGE  *((volatile unsigned int *)0x4000000C)
 #define GPIO_IRQ_PEND  *((volatile unsigned int *)0x40000010)
 
-// Počítadlo přerušení
-volatile int irq_count = 0;
+// Nové registry pro časovač!
+#define MTIME          *((volatile unsigned int *)0x80000000)
+#define MTIMECMP       *((volatile unsigned int *)0x80000004)
+
+volatile int blink_state = 0;
+volatile int target_reached = 0;
 
 __attribute__((interrupt("machine"))) void trap_handler(void) {
-    // 1. Smažeme Pending bit od pinu 0 (Write-1-to-Clear)
-    GPIO_IRQ_PEND = 0x01;
-    
-    // 2. Zvýšíme počítadlo
-    irq_count++;
+    unsigned int cause;
+    // Přečteme registr mcause, abychom zjistili důvod přerušení
+    __asm__ volatile ("csrr %0, mcause" : "=r"(cause));
+
+    if (cause == 0x8000000B) { 
+        // VZBUDILO NÁS TLAČÍTKO Z GPIO
+        GPIO_IRQ_PEND = 0x01; // Smazat příznak z GPIO
+        target_reached = 1;   // Signál k ukončení programu
+    } 
+    else if (cause == 0x80000007) {
+        // VZBUDIL NÁS MTIME ČASOVAČ
+        blink_state = !blink_state; // Překlápíme stav
+        GPIO_DATA = blink_state ? 0xAAAAA : 0x55555; // Ukážeme to na LEDkách
+        
+        // KLÍČOVÝ KROK: Naplánujeme další probuzení!
+        // Pro simulaci dáme 5 us. V realitě by to bylo např. 500000 pro půl sekundy.
+        MTIMECMP = MTIME + 5; 
+    }
 }
 
 void pass() { MAGIC_ADDR = 1; while(1); }
@@ -21,24 +37,23 @@ void pass() { MAGIC_ADDR = 1; while(1); }
 int main() {
     __asm__ volatile ("csrw mtvec, %0" :: "r"((unsigned int)trap_handler));
 
-    // Nastavíme Pin 0 jako VSTUP (0), Piny 1-19 jako VÝSTUP (1)
-    // Binárně: 1111 1111 1111 1111 1110 -> 0xFFFFE
-    GPIO_DIR = 0xFFFFE; 
+    GPIO_DIR = 0xFFFFE; // Pin 0 vstup, ostatní výstupy
+    GPIO_IRQ_MASK = 0x01; // Povolit přerušení od tlačítka
+    
+    // Nastavíme první budík za 5 mikrosekund od teď
+    MTIMECMP = MTIME + 5; 
 
-    // Konfigurace přerušení pro Pin 0
-    GPIO_IRQ_EDGE = 0x00; 
-    GPIO_IRQ_MASK = 0x01; 
-
-    // Povolení přerušení v jádře (MIE bit)
+    // Povolit přerušení globálně
     __asm__ volatile ("csrw mstatus, %0" :: "r"(0x08));
 
-    // Čekáme na 2 nezávislá přerušení!
-    while (irq_count < 2) {
-        // Zápis 20bitového střídavého vzoru na výstupy: 1010 1010 1010 1010 1010
-        GPIO_DATA = 0xAAAAA; 
+    // TADY JE TA SÍLA: 
+    // Namísto zasekávání ve "for" smyčkách může nyní hlavní program
+    // dělat cokoliv užitečného. Hardware sám zajistí pravidelné blikání!
+    while (target_reached == 0) {
+        // ... procesor by mohl počítat Pí, číst senzory, nebo jít spát (WFI)
+        // My zatím jen čekáme, až nás z této smyčky vysvobodí stisk tlačítka.
     }
 
-    // Pokud jsme se dostali sem, MRET úspěšně obnovil přerušení a my chytili oba stisky!
     pass();
     return 0;
 }

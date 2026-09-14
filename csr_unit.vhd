@@ -20,6 +20,7 @@ entity csr_unit is
         -- ==========================================================
         pc_in       : in  std_logic_vector(31 downto 0); -- Aktuální Program Counter (pro uložení při přerušení)
         irq_ext     : in  std_logic;                     -- Externí přerušení (např. od GPIO/UART)
+        irq_timer   : in  std_logic;                     -- Přerušení od MTIME časovače
         is_mret     : in  std_logic;                     -- Procesor hlásí návrat z přerušení!
         
         epc_out     : out std_logic_vector(31 downto 0); -- Kam se má PC vrátit (z registru MEPC)
@@ -86,7 +87,15 @@ begin
                     mstatus_mie  <= mstatus_mpie; -- Obnova ze zálohy
                     mstatus_mpie <= '1';          -- RISC-V standard říká nastavit na 1
 
-                -- B) VSTUP DO PŘERUŠENÍ (Hardwarový Trap)
+                -- B) VSTUP DO PŘERUŠENÍ - ČASOVAČ (Nejvyšší priorita)
+                elsif irq_timer = '1' and mstatus_mie = '1' then
+                    mstatus_mpie <= mstatus_mie;  
+                    mstatus_mie  <= '0';          
+                    mepc         <= pc_in;       
+                    mcause       <= x"80000007"; -- Kód 7: Machine Timer Interrupt
+                    trap_fire    <= '1';
+
+                -- C) VSTUP DO PŘERUŠENÍ - EXTERNÍ (Např. GPIO Tlačítko)
                 elsif irq_ext = '1' and mstatus_mie = '1' then
                     mstatus_mpie <= mstatus_mie; -- 1. Uložíme aktuální stav do zálohy
                     mstatus_mie  <= '0';         -- 2. Zablokujeme další přerušení (aby se nezacyklilo)
@@ -94,7 +103,7 @@ begin
                     mcause       <= x"8000000B"; -- 4. Hardwarový zápis původu (External Interrupt)
                     trap_fire    <= '1';         -- 5. Vystřelíme požadavek na zahození pipeliny a skok
 
-                -- C) SOFTWAROVÝ ZÁPIS (Z instrukcí csr_cmd)
+                -- D) SOFTWAROVÝ ZÁPIS (Z instrukcí csr_cmd)
                 elsif csr_cmd /= "00" then
                     -- ALU logika pro předpočítání výsledku zápisu
                     if    csr_cmd = "01" then temp_write := csr_wdata;                       -- CSRRW (Zápis)
