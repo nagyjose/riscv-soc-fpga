@@ -77,7 +77,7 @@ begin
         rst <= '0';
         
         -- 2. Počkáme 500 ns, aby měl C kód čas nabootovat a nastavit registry
-        wait for 500 ns;      
+        wait for 15 us;      
         
         -- ==========================================
         -- PRVNÍ STISK TLAČÍTKA (Očekáváme IRQ 1)

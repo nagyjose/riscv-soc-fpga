@@ -27,8 +27,8 @@ __attribute__((interrupt("machine"))) void trap_handler(void) {
         GPIO_DATA = blink_state ? 0xAAAAA : 0x55555; // Ukážeme to na LEDkách
         
         // KLÍČOVÝ KROK: Naplánujeme další probuzení!
-        // Pro simulaci dáme 5 us. V realitě by to bylo např. 500000 pro půl sekundy.
-        MTIMECMP = MTIME + 5; 
+        // Pro simulaci dáme 500 us. V realitě by to bylo např. 500000 pro půl sekundy.
+        MTIMECMP = MTIME + 20; 
     }
 }
 
@@ -40,8 +40,8 @@ int main() {
     GPIO_DIR = 0xFFFFE; // Pin 0 vstup, ostatní výstupy
     GPIO_IRQ_MASK = 0x01; // Povolit přerušení od tlačítka
     
-    // Nastavíme první budík za 5 mikrosekund od teď
-    MTIMECMP = MTIME + 5; 
+    // Nastavíme první budík za 500 mikrosekund od teď
+    MTIMECMP = MTIME + 20; 
 
     // Povolit přerušení globálně
     __asm__ volatile ("csrw mstatus, %0" :: "r"(0x08));

@@ -47,7 +47,8 @@ begin
     -- ========================================================================
     -- 1. ADRESNÍ DEKODÉR (Sběrnicová výhybka, Nyní obsahuje i Debug Port)
     -- ========================================================================
-    process(cpu_mem_addr, cpu_mem_byte_ena, cpu_mem_wr_data, ram_rd_data, gpio_rd_data)
+    process(cpu_mem_addr, cpu_mem_byte_ena, cpu_mem_wr_data, 
+	         ram_rd_data, gpio_rd_data, timer_rd_data)
     begin
         -- Výchozí stavy (Zabraňují nechtěnému zápisu)
         ram_byte_ena    <= "0000";
