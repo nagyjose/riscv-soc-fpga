@@ -331,6 +331,7 @@ begin
             
             pc_in       => id_ex.pc,               -- Aktuální PC (kdyby přišlo přerušení)
             irq_ext     => irq_ext_in,             -- IRQ pro GPIO/Timer
+            is_mret     => id_ex.is_mret,
             
             epc_out     => epc_out,
             trap_target => trap_target,

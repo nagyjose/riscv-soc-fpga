@@ -79,19 +79,31 @@ begin
         -- 2. Počkáme 500 ns, aby měl C kód čas nabootovat a nastavit registry
         wait for 500 ns;      
         
-        -- 3. SIMULACE TLAČÍTKA NA PINU 0
-        -- Vytvoříme čistou náběžnou hranu z nuly na jedničku
+        -- ==========================================
+        -- PRVNÍ STISK TLAČÍTKA (Očekáváme IRQ 1)
+        -- ==========================================
         gpio_pins(0) <= '0';
         wait for 20 ns;
-        
-        gpio_pins(0) <= '1'; -- <<< TADY DOCHÁZÍ K PŘERUŠENÍ!
+        gpio_pins(0) <= '1'; -- Hrana nahoru!
         wait for 50 ns;
-        
         gpio_pins(0) <= '0';
         wait for 20 ns;
+        gpio_pins(0) <= 'Z'; -- Uvolnění
         
-        -- Tlačítko pouštíme a pin opět "odpojujeme" od testbenche
-        gpio_pins(0) <= 'Z';
+        -- Dáme procesoru čas na obsluhu (trap_handler) a návrat (MRET)
+        wait for 800 ns;
+        
+        -- ==========================================
+        -- DRUHÝ STISK TLAČÍTKA (Očekáváme IRQ 2)
+        -- ==========================================
+        -- Pokud CSR jednotka neobnovila MIE, procesor tento stisk bude ignorovat!
+        gpio_pins(0) <= '0';
+        wait for 20 ns;
+        gpio_pins(0) <= '1'; -- Hrana nahoru!
+        wait for 50 ns;
+        gpio_pins(0) <= '0';
+        wait for 20 ns;
+        gpio_pins(0) <= 'Z'; -- Uvolnění
         
         -- Timeout bez diakritiky
         wait for 10 ms; 

@@ -5,40 +5,40 @@
 #define GPIO_IRQ_EDGE  *((volatile unsigned int *)0x4000000C)
 #define GPIO_IRQ_PEND  *((volatile unsigned int *)0x40000010)
 
-// Globální proměnná (volatile, aby ji optimalizátor nevymazal!)
-volatile int button_pressed = 0;
+// Počítadlo přerušení
+volatile int irq_count = 0;
 
-// Hardwarový Trap Handler (ISR)
 __attribute__((interrupt("machine"))) void trap_handler(void) {
-    // 1. Smažeme požadavek na přerušení metodou Write-1-to-Clear na nultý bit
+    // 1. Smažeme Pending bit od pinu 0 (Write-1-to-Clear)
     GPIO_IRQ_PEND = 0x01;
     
-    // 2. Dáme hlavnímu programu vědět, že to zafungovalo
-    button_pressed = 1;
+    // 2. Zvýšíme počítadlo
+    irq_count++;
 }
 
 void pass() { MAGIC_ADDR = 1; while(1); }
 
 int main() {
-    // 1. Nastavíme adresu naší obslužné rutiny do systémového registru MTVEC
     __asm__ volatile ("csrw mtvec, %0" :: "r"((unsigned int)trap_handler));
 
-    // 2. Nastavíme Pin 0 jako VSTUP (0), ostatní piny jako VÝSTUP (1)
+    // Nastavíme Pin 0 jako VSTUP (0), Piny 1-19 jako VÝSTUP (1)
+    // Binárně: 1111 1111 1111 1111 1110 -> 0xFFFFE
     GPIO_DIR = 0xFFFFE; 
 
-    // 3. Konfigurace přerušení pro Pin 0
-    GPIO_IRQ_EDGE = 0x00000; // 0 = Reakce na náběžnou hranu
-    GPIO_IRQ_MASK = 0x00001; // Odmaskování (povolení) přerušení z tohoto pinu
+    // Konfigurace přerušení pro Pin 0
+    GPIO_IRQ_EDGE = 0x00; 
+    GPIO_IRQ_MASK = 0x01; 
 
-    // 4. Globální povolení přerušení (Zápis '1' do bitu 3 v MSTATUS)
+    // Povolení přerušení v jádře (MIE bit)
     __asm__ volatile ("csrw mstatus, %0" :: "r"(0x08));
 
-    // 5. Procesor "spí" a dělá zbytečnou práci, dokud nepřijde impuls zvenčí
-    while (button_pressed == 0) {
-        GPIO_DATA = 0xAAAAA; // Signál, že čekáme...
+    // Čekáme na 2 nezávislá přerušení!
+    while (irq_count < 2) {
+        // Zápis 20bitového střídavého vzoru na výstupy: 1010 1010 1010 1010 1010
+        GPIO_DATA = 0xAAAAA; 
     }
 
-    // 6. Pokud jsme se dostali sem, interrupt nás úspěšně vytrhl ze smyčky!
+    // Pokud jsme se dostali sem, MRET úspěšně obnovil přerušení a my chytili oba stisky!
     pass();
     return 0;
 }

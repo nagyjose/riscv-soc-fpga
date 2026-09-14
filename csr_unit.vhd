@@ -20,6 +20,7 @@ entity csr_unit is
         -- ==========================================================
         pc_in       : in  std_logic_vector(31 downto 0); -- Aktuální Program Counter (pro uložení při přerušení)
         irq_ext     : in  std_logic;                     -- Externí přerušení (např. od GPIO/UART)
+        is_mret     : in  std_logic;                     -- Procesor hlásí návrat z přerušení!
         
         epc_out     : out std_logic_vector(31 downto 0); -- Kam se má PC vrátit (z registru MEPC)
         trap_target : out std_logic_vector(31 downto 0); -- Kam má PC skočit při přerušení (z registru MTVEC)
@@ -30,26 +31,28 @@ end entity csr_unit;
 architecture rtl of csr_unit is
 
     -- Fyzické registry (Minimum nutné pro Machine Mode)
-    signal mstatus_mie : std_logic;                       -- Master spínač přerušení (Bit 3 v MSTATUS)
-    signal mtvec       : std_logic_vector(31 downto 0);   -- Vektor přerušení (Kam skočit)
-    signal mepc        : std_logic_vector(31 downto 0);   -- Návratová adresa (Odkud jsme vyskočili)
-    signal mcause      : std_logic_vector(31 downto 0);   -- Původce přerušení
+    signal mstatus_mie  : std_logic;                       -- Master spínač přerušení (Bit 3 v MSTATUS)
+    signal mstatus_mpie : std_logic;                       -- Záložní bit
+    signal mtvec        : std_logic_vector(31 downto 0);   -- Vektor přerušení (Kam skočit)
+    signal mepc         : std_logic_vector(31 downto 0);   -- Návratová adresa (Odkud jsme vyskočili)
+    signal mcause       : std_logic_vector(31 downto 0);   -- Původce přerušení
     
     -- Vnitřní signál pro multiplexer čtení
-    signal read_data   : std_logic_vector(31 downto 0);
+    signal read_data    : std_logic_vector(31 downto 0);
 
 begin
 
     -- ========================================================================
     -- 1. KOMBINAČNÍ ČTENÍ (Bez hodin - okamžitá odpověď)
     -- ========================================================================
-    process(csr_addr, mstatus_mie, mtvec, mepc, mcause)
+    process(csr_addr, mstatus_mie, mstatus_mpie, mtvec, mepc, mcause)
     begin
         -- Výchozí stav (zabraňuje vzniku nechtěných klopných obvodů typu Latch)
         read_data <= (others => '0'); 
         
         case csr_addr is
             when x"300" => read_data(3) <= mstatus_mie; -- MSTATUS (mapujeme jen bit 3)
+                           read_data(7) <= mstatus_mpie;
             when x"305" => read_data    <= mtvec;       -- MTVEC
             when x"341" => read_data    <= mepc;        -- MEPC
             when x"342" => read_data    <= mcause;      -- MCAUSE
@@ -78,14 +81,20 @@ begin
                 -- V každém taktu musí jít signál pro skok dolů, jinak bychom skákali donekonečna
                 trap_fire <= '0'; 
 
-                -- A) HARDWAROVÁ PŘERUŠENÍ (Mají absolutní prioritu)
-                if irq_ext = '1' and mstatus_mie = '1' then
-                    mstatus_mie <= '0';         -- 1. Zablokujeme další přerušení (aby se nezacyklilo)
-                    mepc        <= pc_in;       -- 2. Uložíme aktuální PC do mepc
-                    mcause      <= x"8000000B"; -- 3. Hardwarový zápis původu (External Interrupt)
-                    trap_fire   <= '1';         -- 4. Vystřelíme požadavek na zahození pipeliny a skok
+                -- A) NÁVRAT Z PŘERUŠENÍ (Instrukce MRET)
+                if is_mret = '1' then
+                    mstatus_mie  <= mstatus_mpie; -- Obnova ze zálohy
+                    mstatus_mpie <= '1';          -- RISC-V standard říká nastavit na 1
 
-                -- B) SOFTWAROVÝ ZÁPIS (Z instrukcí csr_cmd)
+                -- B) VSTUP DO PŘERUŠENÍ (Hardwarový Trap)
+                elsif irq_ext = '1' and mstatus_mie = '1' then
+                    mstatus_mpie <= mstatus_mie; -- 1. Uložíme aktuální stav do zálohy
+                    mstatus_mie  <= '0';         -- 2. Zablokujeme další přerušení (aby se nezacyklilo)
+                    mepc         <= pc_in;       -- 3. Uložíme aktuální PC do mepc
+                    mcause       <= x"8000000B"; -- 4. Hardwarový zápis původu (External Interrupt)
+                    trap_fire    <= '1';         -- 5. Vystřelíme požadavek na zahození pipeliny a skok
+
+                -- C) SOFTWAROVÝ ZÁPIS (Z instrukcí csr_cmd)
                 elsif csr_cmd /= "00" then
                     -- ALU logika pro předpočítání výsledku zápisu
                     if    csr_cmd = "01" then temp_write := csr_wdata;                       -- CSRRW (Zápis)
@@ -95,10 +104,11 @@ begin
 
                     -- Uložení předpočítané hodnoty do správného registru
                     case csr_addr is
-                        when x"300" => mstatus_mie <= temp_write(3);
-                        when x"305" => mtvec       <= temp_write;
-                        when x"341" => mepc        <= temp_write;
-                        when x"342" => mcause      <= temp_write; -- Softwarový zápis
+                        when x"300" => mstatus_mie  <= temp_write(3);
+                                       mstatus_mpie <= temp_write(7); -- Zápis i do zálohy
+                        when x"305" => mtvec        <= temp_write;
+                        when x"341" => mepc         <= temp_write;
+                        when x"342" => mcause       <= temp_write;    -- Softwarový zápis
                         when others => null; -- Zápis do neznámého registru je ticho zahozen
                     end case;
                 end if;
