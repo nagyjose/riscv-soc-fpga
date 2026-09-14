@@ -6,7 +6,8 @@ entity riscv_core is
     port (
         clk : in std_logic;
         rst : in std_logic;
-        -- Zde v budoucnu přibudou piny pro FPGA (např. gpio_out, uart_tx)
+        
+        gpio_pins    : inout std_logic_vector(7 downto 0);
         
         -- NAŠE PRVNÍ PERIFERIE: Výstup pro Testbench
         tb_success   : out std_logic;
@@ -29,15 +30,21 @@ architecture rtl of riscv_core is
     signal ram_rd_data      : std_logic_vector(31 downto 0);
     signal ram_byte_ena     : std_logic_vector(3 downto 0);
 
+    -- Signály pro GPIO periferii
+    signal gpio_rd_data     : std_logic_vector(31 downto 0);
+    signal gpio_cs          : std_logic;
+    signal gpio_irq         : std_logic;
+
 begin
 
     -- ========================================================================
     -- 1. ADRESNÍ DEKODÉR (Sběrnicová výhybka, Nyní obsahuje i Debug Port)
     -- ========================================================================
-    process(cpu_mem_addr, cpu_mem_byte_ena, cpu_mem_wr_data, ram_rd_data)
+    process(cpu_mem_addr, cpu_mem_byte_ena, cpu_mem_wr_data, ram_rd_data, gpio_rd_data)
     begin
         -- Výchozí stavy (Zabraňují nechtěnému zápisu)
         ram_byte_ena    <= "0000";
+        gpio_cs         <= '0';
         cpu_mem_rd_data <= (others => '0');
         tb_success      <= '0';
         tb_error_id     <= (others => '0');
@@ -54,6 +61,11 @@ begin
             elsif cpu_mem_wr_data(31 downto 16) = x"DEAD" then
                 tb_error_id <= cpu_mem_wr_data(15 downto 0);
             end if;
+
+        -- C) GPIO Port (0x4000XXXX)
+        elsif cpu_mem_addr(31 downto 28) = x"4" then
+            gpio_cs <= '1';
+            cpu_mem_rd_data <= gpio_rd_data;
             
         -- Zde v budoucnu přidáme "elsif cpu_mem_addr(31 downto 28) = x"4" pro GPIO!
         end if;
@@ -71,7 +83,8 @@ begin
             mem_addr     => cpu_mem_addr,
             mem_wr_data  => cpu_mem_wr_data,
             mem_rd_data  => cpu_mem_rd_data,
-            mem_byte_ena => cpu_mem_byte_ena
+            mem_byte_ena => cpu_mem_byte_ena,
+            irq_ext_in   => gpio_irq
         );
 
     -- ========================================================================
@@ -92,6 +105,25 @@ begin
             wr_data_b   => cpu_mem_wr_data,
             byte_ena_b  => ram_byte_ena,
             rd_data_b   => ram_rd_data
+        );
+
+    -- ========================================================================
+    -- 4. INSTANTIACE GPIO PERIFERIE (Omezená na 8 pinů)
+    -- ========================================================================
+    u_gpio: entity work.gpio
+        generic map (
+            PINS => 16 -- Drastická úspora Logických Elementů
+        )
+        port map (
+            clk       => clk,
+            rst       => rst,
+            cs        => gpio_cs,
+            wr_en     => '1' when cpu_mem_byte_ena /= "0000" else '0',
+            addr      => cpu_mem_addr(4 downto 2),
+            wr_data   => cpu_mem_wr_data,
+            rd_data   => gpio_rd_data,
+            irq_out   => gpio_irq,
+            gpio_pins => gpio_pins
         );
 
 end architecture rtl;

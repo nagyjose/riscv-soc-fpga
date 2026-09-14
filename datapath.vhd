@@ -16,7 +16,9 @@ entity datapath is
         mem_addr     : out std_logic_vector(31 downto 0);
         mem_wr_data  : out std_logic_vector(31 downto 0);
         mem_rd_data  : in  std_logic_vector(31 downto 0);
-        mem_byte_ena : out std_logic_vector(3 downto 0)
+        mem_byte_ena : out std_logic_vector(3 downto 0);
+
+        irq_ext_in   : in  std_logic
     );
 end entity datapath;
 
@@ -328,7 +330,7 @@ begin
             csr_rdata   => ex_csr_rdata,
             
             pc_in       => id_ex.pc,               -- Aktuální PC (kdyby přišlo přerušení)
-            irq_ext     => '0',                    -- ZATÍM UZEMNĚNO (Připraveno pro GPIO/Timer)
+            irq_ext     => irq_ext_in,             -- IRQ pro GPIO/Timer
             
             epc_out     => epc_out,
             trap_target => trap_target,
