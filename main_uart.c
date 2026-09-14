@@ -15,11 +15,6 @@
 #define UART_STATUS    *((volatile unsigned int *)0x40001004)
 #define UART_BAUD      *((volatile unsigned int *)0x40001008)
 
-// SPI Registry (0x40002000)
-#define SPI_DATA      *((volatile unsigned int *)0x40002000)
-#define SPI_STATUS    *((volatile unsigned int *)0x40002004)
-#define SPI_BAUD      *((volatile unsigned int *)0x40002008)
-
 volatile int blink_state = 0;
 volatile int target_reached = 0;
 
@@ -36,22 +31,6 @@ void print(const char *str) {
     while (*str) {
         uart_putchar(*str++);
     }
-}
-
-// ====================================================================
-// POMOCNÉ FUNKCE PRO SPI
-// ====================================================================
-unsigned char spi_transfer(unsigned char data) {
-    // 1. Zapíšeme data do registru (čímž HW automaticky zahájí přenos)
-    SPI_DATA = data;
-    
-    // 2. Čekáme, dokud je sběrnice zaneprázdněná (Bit 0 v STATUS registru svítí)
-    while (SPI_STATUS & 0x01) {
-        // Zde čekáme, až HW odtiká 8 hodinových pulzů
-    }
-    
-    // 3. Přečteme výsledek z toho samého registru
-    return (unsigned char)SPI_DATA;
 }
 
 // ====================================================================
@@ -111,16 +90,7 @@ int main() {
 
     __asm__ volatile ("csrw mstatus, %0" :: "r"(0x08));
 
-    // Konfigurace SPI rychlosti (např. 1 MHz při 100MHz CPU = dělička 50 pro půlperiodu)
-    SPI_BAUD = 50;
-
-    // Test SPI Loopbacku - pošleme znak 'S' (0x53)
-    unsigned char odpoved = spi_transfer('S');
-
-    // Můžeme si výsledek rovnou vypsat přes UART, abychom to viděli i tam!
-    print("SPI Loopback test: Poslal jsem 'S', vratilo se: [");
-    uart_putchar(odpoved);
-    print("]\n");
+    print("Hello World!\n");
 
     while (target_reached == 0) { }
 

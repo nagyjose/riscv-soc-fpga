@@ -14,6 +14,11 @@ entity riscv_core is
         uart_rx_pin  : in  std_logic;
         uart_tx_pin  : out std_logic;
         
+        -- SPI piny (Chip Select se řeší softwarově přes GPIO)
+        spi_sck_pin  : out std_logic;
+        spi_mosi_pin : out std_logic;
+        spi_miso_pin : in  std_logic;
+        
         -- Výstup pro Testbench
         tb_success   : out std_logic;
         tb_error_id  : out std_logic_vector(15 downto 0)
@@ -53,6 +58,11 @@ architecture rtl of riscv_core is
     signal uart_irq         : std_logic;
     signal uart_wr_en       : std_logic;
 
+    -- Signály pro SPI
+    signal spi_rd_data      : std_logic_vector(31 downto 0);
+    signal spi_cs           : std_logic;
+    signal spi_wr_en        : std_logic;
+
     -- Centrální linka pro externí přerušení (Kód 11)
     signal shared_irq_ext   : std_logic;
 
@@ -62,18 +72,19 @@ begin
     -- 1. ADRESNÍ DEKODÉR (Sběrnicová výhybka, Nyní obsahuje i Debug Port)
     -- ========================================================================
     process(cpu_mem_addr, cpu_mem_byte_ena, cpu_mem_wr_data, 
-	         ram_rd_data, gpio_rd_data, timer_rd_data,
-				uart_rd_data)
+            ram_rd_data, gpio_rd_data, timer_rd_data,
+            uart_rd_data, spi_rd_data)
     begin
         -- Výchozí stavy (Zabraňují nechtěnému zápisu)
         ram_byte_ena    <= "0000";
         gpio_cs         <= '0';
         timer_cs        <= '0';
         uart_cs         <= '0';
+        spi_cs          <= '0';
         cpu_mem_rd_data <= (others => '0');
         tb_success      <= '0';
         tb_error_id     <= (others => '0');
-        
+
         -- A) Pokud adresa začíná nulami (0x0000XXXX) -> Směruj do RAM
         if cpu_mem_addr(31 downto 28) = x"0" then
             ram_byte_ena    <= cpu_mem_byte_ena; -- Povol zápis do RAM
@@ -97,11 +108,16 @@ begin
             uart_cs <= '1';
             cpu_mem_rd_data <= uart_rd_data;
 
-        -- E) Systémový časovač MTIME (0x8000XXXX)
+        -- E) NOVÉ: SPI Port (0x40002000)
+        elsif cpu_mem_addr(31 downto 12) = x"40002" then
+            spi_cs <= '1';
+            cpu_mem_rd_data <= spi_rd_data;
+
+        -- F) Systémový časovač MTIME (0x8000XXXX)
         elsif cpu_mem_addr(31 downto 28) = x"8" then
             timer_cs <= '1';
             cpu_mem_rd_data <= timer_rd_data;
-        
+
         -- Zde v budoucnu přidáme "elsif cpu_mem_addr(31 downto 28) = x"4" pro GPIO!
         end if;
     end process;
@@ -206,6 +222,25 @@ begin
             irq_out   => uart_irq,
             rx_pin    => uart_rx_pin,
             tx_pin    => uart_tx_pin
+        );
+
+    -- ========================================================================
+    -- 7. INSTANTIACE SPI MASTERA
+    -- ========================================================================
+    spi_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
+    
+    u_spi: entity work.spi_master
+        port map (
+            clk       => clk,
+            rst       => rst,
+            cs        => spi_cs,
+            wr_en     => spi_wr_en,
+            addr      => cpu_mem_addr(3 downto 2),
+            wr_data   => cpu_mem_wr_data,
+            rd_data   => spi_rd_data,
+            spi_sck   => spi_sck_pin,
+            spi_mosi  => spi_mosi_pin,
+            spi_miso  => spi_miso_pin
         );
 
 end architecture rtl;

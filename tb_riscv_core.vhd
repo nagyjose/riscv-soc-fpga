@@ -11,15 +11,19 @@ architecture sim of tb_riscv_core is
     -- 1. Signály pro propojování na naší virtuální desce
     signal clk          : std_logic := '0';
     signal rst          : std_logic := '1'; -- Začínáme v resetu!
-
+    
     signal gpio_pins    : std_logic_vector(19 downto 0) := (others => 'Z');
-
+    
     signal uart_rx_pin  : std_logic := '1'; -- Sériová linka je v klidu HIGH
     signal uart_tx_pin  : std_logic;
     
+    signal spi_sck_pin  : std_logic;
+    signal spi_mosi_pin : std_logic;
+    signal spi_miso_pin : std_logic := '1';
+    
     signal tb_success   : std_logic;
     signal tb_error_id  : std_logic_vector(15 downto 0);
-
+    
     -- Definice periody hodin (10 ns = 100 MHz procesor)
     constant CLK_PERIOD : time := 10 ns;
 
@@ -35,6 +39,9 @@ begin
             gpio_pins   => gpio_pins,
             uart_rx_pin => uart_rx_pin,
             uart_tx_pin => uart_tx_pin,
+            spi_sck_pin  => spi_sck_pin,
+            spi_mosi_pin => spi_mosi_pin,
+            spi_miso_pin => spi_miso_pin,
             tb_success  => tb_success,
             tb_error_id => tb_error_id
         );
@@ -70,6 +77,12 @@ begin
             end if;
         end if;
     end process;
+
+    -- ========================================================================
+    -- SIMULACE SPI SLAVE ZAŘÍZENÍ (Hardwarový Loopback)
+    -- ========================================================================
+    -- Cokoliv procesor pošle na MOSI, to se mu okamžitě vrátí na MISO.
+    spi_miso_pin <= spi_mosi_pin;
 
     -- ========================================================================
     -- 4. HLAVNÍ SIMULAČNÍ SCÉNÁŘ (Pouze startovací sekvence)
