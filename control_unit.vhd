@@ -170,36 +170,42 @@ begin
                     
                     when "001" =>
                         if    funct7 = "0110000" then alu_ctrl <= "10011"; -- ROL (Rotate Left)
-                        elsif funct7 = "0010100" then alu_ctrl <= "10101"; -- BSET (Bit Set)
-                        elsif funct7 = "0100100" then alu_ctrl <= "10110"; -- BCLR (Bit Clear)
-                        elsif funct7 = "0110100" then alu_ctrl <= "10111"; -- BINV (Bit Invert)
+                        elsif funct7 = "0010100" then alu_ctrl <= "10101"; -- BSET (Bit Set) / BSETI
+                        elsif funct7 = "0100100" then alu_ctrl <= "10110"; -- BCLR (Bit Clear) / BCLRI
+                        elsif funct7 = "0110100" then alu_ctrl <= "10111"; -- BINV (Bit Invert) / BINVI
                         else                          alu_ctrl <= "00101"; -- SLL (Shift Left Logical)
                         end if;
                     
-                    when "010" => alu_ctrl <= "01000"; -- SLT (Set Less Than)
-                    when "011" => alu_ctrl <= "01001"; -- SLTU
+                    when "010" => alu_ctrl <= "01000"; -- SLT (Set Less Than) / SLTI
+                    when "011" => alu_ctrl <= "01001"; -- SLTU / SLTIU
                     
                     when "100" =>
-                        if funct7 = "0100000" then alu_ctrl <= "10010"; -- XNOR
-                        else                       alu_ctrl <= "00100"; -- XOR
+                        if opcode(5) = '1' and funct7 = "0100000" then 
+                            alu_ctrl <= "10010"; -- XNOR
+                        else
+                            alu_ctrl <= "00100"; -- XOR / XORI
                         end if;
                     
                     when "101" => 
                         if    funct7 = "0110000" then alu_ctrl <= "10100"; -- ROR / RORI
                         elsif funct7 = "0100000" then alu_ctrl <= "00111"; -- SRA / SRAI
-                        elsif funct7 = "0100100" then alu_ctrl <= "11000"; -- BEXT (Bit Extract)
+                        elsif funct7 = "0100100" then alu_ctrl <= "11000"; -- BEXT (Bit Extract) / BEXTI
                         elsif funct7 = "0110100" then alu_ctrl <= "11001"; -- REV8 (Byte Reverse)
                         else                          alu_ctrl <= "00110"; -- SRL / SRLI
                         end if;
                     
                     when "110" => 
-                        if funct7 = "0100000" then alu_ctrl <= "10001"; -- ORN (OR NOT)
-                        else                       alu_ctrl <= "00011"; -- OR
+                        if opcode(5) = '1' and funct7 = "0100000" then 
+                            alu_ctrl <= "10001"; -- ORN (OR NOT)
+                        else                       
+                            alu_ctrl <= "00011"; -- OR / ORI
                         end if;
                     
                     when "111" => 
-                        if funct7 = "0100000" then alu_ctrl <= "10000"; -- ANDN (AND NOT)
-                        else                       alu_ctrl <= "00010"; -- AND
+                        if opcode(5) = '1' and funct7 = "0100000" then 
+                            alu_ctrl <= "10000"; -- ANDN (AND NOT)
+                        else
+                            alu_ctrl <= "00010"; -- AND / ANDI
                         end if;
                     
                     when others => alu_ctrl <= "00000";
