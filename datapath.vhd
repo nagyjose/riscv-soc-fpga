@@ -46,7 +46,7 @@ architecture rtl of datapath is
         reg_write  : std_logic;
         res_src    : std_logic_vector(1 downto 0);
         mem_write  : std_logic;
-        alu_ctrl   : std_logic_vector(3 downto 0);
+        alu_ctrl   : std_logic_vector(4 downto 0);
         alu_src    : std_logic;
         branch     : std_logic;
         jump       : std_logic;
@@ -108,7 +108,7 @@ architecture rtl of datapath is
     signal id_jump      : std_logic;
     signal id_jalr      : std_logic;
     signal id_alu_src_a : std_logic;
-    signal id_alu_ctrl  : std_logic_vector(3 downto 0);
+    signal id_alu_ctrl  : std_logic_vector(4 downto 0);
     signal id_imm_ext   : std_logic_vector(31 downto 0);
     signal id_rd_data1  : std_logic_vector(31 downto 0);
     signal id_rd_data2  : std_logic_vector(31 downto 0);

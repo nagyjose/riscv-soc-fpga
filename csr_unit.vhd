@@ -43,7 +43,7 @@ begin
     -- ========================================================================
     -- 1. KOMBINAČNÍ ČTENÍ (Bez hodin - okamžitá odpověď)
     -- ========================================================================
-    process(csr_addr, mstatus_mie, mtvec, mepc)
+    process(csr_addr, mstatus_mie, mtvec, mepc, mcause)
     begin
         -- Výchozí stav (zabraňuje vzniku nechtěných klopných obvodů typu Latch)
         read_data <= (others => '0'); 

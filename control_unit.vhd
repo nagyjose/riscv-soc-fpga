@@ -22,7 +22,7 @@ entity control_unit is
         alu_src_a : out std_logic;                     -- 0 = rs1, 1 = PC (pro AUIPC)
         
         -- Výstup pro ALU (ALU Decoder)
-        alu_ctrl  : out std_logic_vector(3 downto 0);
+        alu_ctrl  : out std_logic_vector(4 downto 0);
 
         -- Výstupy pro CSR jednotku
         csr_cmd   : out std_logic_vector(1 downto 0);  -- 00=Nic, 01=RW, 10=RS, 11=RC
@@ -148,14 +148,14 @@ begin
     process(alu_op, funct3, funct7, opcode)
     begin
         -- Výchozí hodnota pro ALU je sčítání
-        alu_ctrl <= "0000"; 
+        alu_ctrl <= "00000"; 
         
         case alu_op is
             when "00" => -- ALU počítá adresy pro Load/Store
-                alu_ctrl <= "0000"; -- Sčítání (ADD)
+                alu_ctrl <= "00000"; -- Sčítání (ADD)
                 
             when "01" => -- ALU porovnává pro skoky (Branch)
-                alu_ctrl <= "0001"; -- Odčítání (SUB) -> vygeneruje zero_flag
+                alu_ctrl <= "00001"; -- Odčítání (SUB) -> vygeneruje zero_flag
                 
             when "10" => -- R-Type nebo I-Type (rozhoduje funct3)
                 case funct3 is
@@ -163,28 +163,50 @@ begin
                         -- Zde je chyták: U I-Type (ADDI) funct7 neexistuje.
                         -- U R-Type (ADD/SUB) záleží na bitu funct7_b5 (0=ADD, 1=SUB).
                         if opcode = OPC_OP and funct7(5) = '1' then
-                            alu_ctrl <= "0001"; -- SUB
+                            alu_ctrl <= "00001"; -- SUB
                         else
-                            alu_ctrl <= "0000"; -- ADD (nebo ADDI)
+                            alu_ctrl <= "00000"; -- ADD / ADDI
                         end if;
-                        
-                    when "010" => alu_ctrl <= "1000"; -- SLT (Set Less Than)
-                    when "011" => alu_ctrl <= "1001"; -- SLTU
-                    when "100" => alu_ctrl <= "0100"; -- XOR
-                    when "110" => alu_ctrl <= "0011"; -- OR
-                    when "111" => alu_ctrl <= "0010"; -- AND
-                    when "001" => alu_ctrl <= "0101"; -- SLL
+                    
+                    when "001" =>
+                        if    funct7 = "0110000" then alu_ctrl <= "10011"; -- ROL (Rotate Left)
+                        elsif funct7 = "0010100" then alu_ctrl <= "10101"; -- BSET (Bit Set)
+                        elsif funct7 = "0100100" then alu_ctrl <= "10110"; -- BCLR (Bit Clear)
+                        elsif funct7 = "0110100" then alu_ctrl <= "10111"; -- BINV (Bit Invert)
+                        else                          alu_ctrl <= "00101"; -- SLL (Shift Left Logical)
+                        end if;
+                    
+                    when "010" => alu_ctrl <= "01000"; -- SLT (Set Less Than)
+                    when "011" => alu_ctrl <= "01001"; -- SLTU
+                    
+                    when "100" =>
+                        if funct7 = "0100000" then alu_ctrl <= "10010"; -- XNOR
+                        else                       alu_ctrl <= "00100"; -- XOR
+                        end if;
+                    
                     when "101" => 
-                        if funct7(5) = '1' then
-                            alu_ctrl <= "0111"; -- SRA
-                        else
-                            alu_ctrl <= "0110"; -- SRL
+                        if    funct7 = "0110000" then alu_ctrl <= "10100"; -- ROR / RORI
+                        elsif funct7 = "0100000" then alu_ctrl <= "00111"; -- SRA / SRAI
+                        elsif funct7 = "0100100" then alu_ctrl <= "11000"; -- BEXT (Bit Extract)
+                        elsif funct7 = "0110100" then alu_ctrl <= "11001"; -- REV8 (Byte Reverse)
+                        else                          alu_ctrl <= "00110"; -- SRL / SRLI
                         end if;
-                    when others => alu_ctrl <= "0000";
+                    
+                    when "110" => 
+                        if funct7 = "0100000" then alu_ctrl <= "10001"; -- ORN (OR NOT)
+                        else                       alu_ctrl <= "00011"; -- OR
+                        end if;
+                    
+                    when "111" => 
+                        if funct7 = "0100000" then alu_ctrl <= "10000"; -- ANDN (AND NOT)
+                        else                       alu_ctrl <= "00010"; -- AND
+                        end if;
+                    
+                    when others => alu_ctrl <= "00000";
                 end case;
                 
             when others =>
-                alu_ctrl <= "0000";
+                alu_ctrl <= "00000";
         end case;
     end process;
 
