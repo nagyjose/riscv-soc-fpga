@@ -18,6 +18,10 @@ vcom csr_unit.vhd
 vcom mult_div_unit.vhd
 vcom gpio.vhd
 vcom mtime.vhd
+vcom uart_fifo.vhd
+vcom uart_tx.vhd
+vcom uart_rx.vhd
+vcom uart.vhd
 
 # 3. DATOVÁ CESTA A TOP-LEVEL (Spojují předchozí moduly dohromady)
 vcom datapath.vhd

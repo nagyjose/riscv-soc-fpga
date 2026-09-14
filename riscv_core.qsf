@@ -38,7 +38,7 @@
 
 set_global_assignment -name FAMILY "Cyclone II"
 set_global_assignment -name DEVICE EP2C5T144C8
-set_global_assignment -name TOP_LEVEL_ENTITY riscv_core
+set_global_assignment -name TOP_LEVEL_ENTITY gpio
 set_global_assignment -name ORIGINAL_QUARTUS_VERSION "13.0 SP1"
 set_global_assignment -name PROJECT_CREATION_TIME_DATE "12:20:12  SEPTEMBER 01, 2026"
 set_global_assignment -name LAST_QUARTUS_VERSION "13.0 SP1"
@@ -74,8 +74,12 @@ set_global_assignment -name VHDL_FILE dual_port_ram.vhd
 set_global_assignment -name VHDL_FILE csr_unit.vhd
 set_global_assignment -name VHDL_FILE mult_div_unit.vhd
 set_global_assignment -name VHDL_FILE gpio.vhd
+set_global_assignment -name VHDL_FILE mtime.vhd
+set_global_assignment -name VHDL_FILE uart_fifo.vhd
+set_global_assignment -name VHDL_FILE uart_tx.vhd
+set_global_assignment -name VHDL_FILE uart_rx.vhd
+set_global_assignment -name VHDL_FILE uart.vhd
 set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
 set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
 set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
-set_global_assignment -name VHDL_FILE mtime.vhd
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
