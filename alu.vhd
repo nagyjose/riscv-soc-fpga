@@ -100,7 +100,10 @@ begin
                 
             when "11001" => -- REV8 (Byte Reverse)
                 result <= src_a(7 downto 0) & src_a(15 downto 8) & src_a(23 downto 16) & src_a(31 downto 24);
-
+            
+            when "11111" => -- PASS_B (Záchrana pro LUI)
+                result <= src_b;
+            
             when others =>
                 result <= (others => '0'); -- Pojistka proti neznámému kódu
         end case;

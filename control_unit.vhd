@@ -89,7 +89,7 @@ begin
                 imm_src   <= "100"; -- U-Type konstanta
                 alu_src   <= '1';   -- ALU bere konstantu
                 res_src   <= "00";  -- Zapisujeme výsledek z ALU
-                alu_op    <= "00";  -- ALU bude sčítat (x0 + imm = imm)
+                alu_op    <= "11";  -- ALU bude sčítat (x0 + imm = imm)
                 
             when OPC_AUIPC =>
                 reg_write <= '1';
@@ -210,6 +210,9 @@ begin
                     
                     when others => alu_ctrl <= "00000";
                 end case;
+                
+            when "11" => 
+                alu_ctrl <= "11111"; -- LUI: Ignoruj rs1 a propust jen konstantu (PASS_B)
                 
             when others =>
                 alu_ctrl <= "00000";
