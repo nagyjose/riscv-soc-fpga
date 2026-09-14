@@ -64,7 +64,7 @@ __attribute__((interrupt("machine"))) void trap_handler(void) {
     else if (cause == 0x80000007) {
         blink_state = !blink_state;
         GPIO_DATA = blink_state ? 0xAAAAA : 0x55555;
-        MTIMECMP = MTIME + 20; // Naplánovat další tik pro rychlou simulaci
+        MTIMECMP = MTIME + 5000; // Naplánovat další tik pro rychlou simulaci
     }
 }
 
@@ -76,26 +76,23 @@ void pass() { MAGIC_ADDR = 1; while(1); }
 int main() {
     __asm__ volatile ("csrw mtvec, %0" :: "r"((unsigned int)trap_handler));
 
-    // INICIALIZACE HW
-    GPIO_DIR = 0xFFFFE;   // Pin 0 vstup, ostatní výstupy
-    GPIO_IRQ_MASK = 0x01; // Povolit přerušení od tlačítka
+    GPIO_DIR = 0xFFFFE;
+    GPIO_IRQ_MASK = 0x01;
+
+    GPIO_IRQ_PEND = 0xFFFFFFFF;
     
-    // ZRYCHLENÍ UARTU PRO MODELSIM (Pro reálný křemík zakomentovat!)
-    UART_BAUD = 10;       // Dělička 10 = extrémně rychlý baudrate (1 bit = 100 ns)
+    // OPRAVA 1: Baud rate musí být min. 160 pro správný chod RX oversamplingu!
+    // 160 taktů = 1.6 us na jeden bit
+    UART_BAUD = 160;       
 
-    MTIMECMP = MTIME + 20; 
+    // OPRAVA 2: Uklidníme časovač (z 20 ns na 50 mikrosekund), ať nás teď neruší
+    MTIMECMP = MTIME + 5000; 
 
-    // Povolit globální přerušení
     __asm__ volatile ("csrw mstatus, %0" :: "r"(0x08));
 
-    // První slova tvého křemíku!
     print("Hello World!\n");
-    print("SoC is ready!\n");
 
-    // Procesor se uspí do nekonečné smyčky, zbytek obslouží HW v přerušení
-    while (target_reached == 0) {
-        // Zde by mohla být instrukce WFI (Wait For Interrupt) pro snížení spotřeby
-    }
+    while (target_reached == 0) { }
 
     pass();
     return 0;

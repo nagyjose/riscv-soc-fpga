@@ -9,7 +9,7 @@ use ieee.std_logic_textio.all;
 
 entity dual_port_ram is
     generic (
-        RAM_SIZE_WORDS : integer := 1024;
+        RAM_SIZE_WORDS : integer := 2048;
         -- 1. ZMĚNA: Pro ModelSim MUSÍME číst surový .hex soubor!
         INIT_FILE      : string  := "program.hex"
     );

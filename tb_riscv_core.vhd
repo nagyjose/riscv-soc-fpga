@@ -76,31 +76,35 @@ begin
     -- ========================================================================
     stimulus: process
     begin
-        -- 1. Fáze: Drž procesor v resetu, aby se vše ustálilo
+        -- 1. Výchozí stav (Tlačítko uvolněno, linka v klidu)
+        gpio_pins(19 downto 1) <= (others => 'Z');
+        gpio_pins(0) <= '1';
+
+        -- 2. Fáze: Drž procesor v resetu, aby se vše ustálilo
         rst <= '1';
         wait for 20 ns;
         rst <= '0';
         
-        -- 2. Počkáme 500 ns, aby měl C kód čas nabootovat a nastavit registry
-        wait for 20 us;      
+        -- 3. Počkáme 500 ns, aby měl C kód čas nabootovat a nastavit registry
+        wait for 250 us;      
         
         -- ==========================================
         -- TEST PŘIJÍMAČE: Pošleme procesoru znak 'X' (0x58 = 01011000 binárně)
         -- LSB první -> pošleme: Start(0), 0,0,0,1,1,0,1,0, Stop(1)
         -- ==========================================
-        -- Rychlost bitu je 100 ns (protože v C nastavíme UART_BAUD na 10)
-        uart_rx_pin <= '0'; wait for 100 ns; -- Start bit
-        uart_rx_pin <= '0'; wait for 100 ns; -- Bit 0 (LSB)
-        uart_rx_pin <= '0'; wait for 100 ns; -- Bit 1
-        uart_rx_pin <= '0'; wait for 100 ns; -- Bit 2
-        uart_rx_pin <= '1'; wait for 100 ns; -- Bit 3
-        uart_rx_pin <= '1'; wait for 100 ns; -- Bit 4
-        uart_rx_pin <= '0'; wait for 100 ns; -- Bit 5
-        uart_rx_pin <= '1'; wait for 100 ns; -- Bit 6
-        uart_rx_pin <= '0'; wait for 100 ns; -- Bit 7 (MSB)
-        uart_rx_pin <= '1'; wait for 100 ns; -- Stop bit
+        -- Rychlost bitu je 1600 ns (protože v C nastavíme UART_BAUD na 160)
+        uart_rx_pin <= '0'; wait for 1600 ns; -- Start bit
+        uart_rx_pin <= '0'; wait for 1600 ns; -- Bit 0 (LSB)
+        uart_rx_pin <= '0'; wait for 1600 ns; -- Bit 1
+        uart_rx_pin <= '0'; wait for 1600 ns; -- Bit 2
+        uart_rx_pin <= '1'; wait for 1600 ns; -- Bit 3
+        uart_rx_pin <= '1'; wait for 1600 ns; -- Bit 4
+        uart_rx_pin <= '0'; wait for 1600 ns; -- Bit 5
+        uart_rx_pin <= '1'; wait for 1600 ns; -- Bit 6
+        uart_rx_pin <= '0'; wait for 1600 ns; -- Bit 7 (MSB)
+        uart_rx_pin <= '1'; wait for 1600 ns; -- Stop bit
         
-        wait for 5 us;
+        wait for 50 us;
         
         -- ==========================================
         -- PRVNÍ STISK TLAČÍTKA (Očekáváme IRQ 1)
