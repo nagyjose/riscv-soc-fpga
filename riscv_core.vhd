@@ -9,7 +9,7 @@ entity riscv_core is
         
         -- GPIO piny
         gpio_pins    : inout std_logic_vector(19 downto 0);
-
+        
         -- UART piny
         uart_rx_pin  : in  std_logic;
         uart_tx_pin  : out std_logic;
@@ -18,6 +18,9 @@ entity riscv_core is
         spi_sck_pin  : out std_logic;
         spi_mosi_pin : out std_logic;
         spi_miso_pin : in  std_logic;
+        
+        -- PWM Timer výstup
+        pwm_pin_out  : out std_logic;
         
         -- Výstup pro Testbench
         tb_success   : out std_logic;
@@ -63,6 +66,11 @@ architecture rtl of riscv_core is
     signal spi_cs           : std_logic;
     signal spi_wr_en        : std_logic;
 
+    -- Signály pro HW Timer
+    signal timer1_rd_data : std_logic_vector(31 downto 0);
+    signal timer1_cs      : std_logic;
+    signal timer1_irq     : std_logic;
+
     -- Centrální linka pro externí přerušení (Kód 11)
     signal shared_irq_ext   : std_logic;
 
@@ -73,7 +81,7 @@ begin
     -- ========================================================================
     process(cpu_mem_addr, cpu_mem_byte_ena, cpu_mem_wr_data, 
             ram_rd_data, gpio_rd_data, timer_rd_data,
-            uart_rd_data, spi_rd_data)
+            uart_rd_data, spi_rd_data, timer1_rd_data)
     begin
         -- Výchozí stavy (Zabraňují nechtěnému zápisu)
         ram_byte_ena    <= "0000";
@@ -81,6 +89,7 @@ begin
         timer_cs        <= '0';
         uart_cs         <= '0';
         spi_cs          <= '0';
+        timer1_cs       <= '0';
         cpu_mem_rd_data <= (others => '0');
         tb_success      <= '0';
         tb_error_id     <= (others => '0');
@@ -108,12 +117,17 @@ begin
             uart_cs <= '1';
             cpu_mem_rd_data <= uart_rd_data;
 
-        -- E) NOVÉ: SPI Port (0x40002000)
+        -- E) SPI Port (0x40002000)
         elsif cpu_mem_addr(31 downto 12) = x"40002" then
             spi_cs <= '1';
             cpu_mem_rd_data <= spi_rd_data;
 
-        -- F) Systémový časovač MTIME (0x8000XXXX)
+        -- F) HW Timer (0x40003000)
+        elsif cpu_mem_addr(31 downto 12) = x"40003" then
+            timer1_cs <= '1';
+            cpu_mem_rd_data <= timer1_rd_data;
+
+        -- G) Systémový časovač MTIME (0x8000XXXX)
         elsif cpu_mem_addr(31 downto 28) = x"8" then
             timer_cs <= '1';
             cpu_mem_rd_data <= timer_rd_data;
@@ -139,8 +153,8 @@ begin
             irq_timer_in => timer_irq
         );
     
-    -- Logický součet (Pokud křičí GPIO nebo UART, vzbudíme procesor)
-    shared_irq_ext <= gpio_irq or uart_irq;
+    -- Logický součet (GPIO, UART, nebo HW Timer)
+    shared_irq_ext <= gpio_irq or uart_irq or timer1_irq;
 
     -- ========================================================================
     -- 3. INSTANTIACE SDÍLENÉ DUAL-PORT PAMĚTI
@@ -241,6 +255,23 @@ begin
             spi_sck   => spi_sck_pin,
             spi_mosi  => spi_mosi_pin,
             spi_miso  => spi_miso_pin
+        );
+
+    -- ========================================================================
+    -- 8. INSTANTIACE HW TIMERU 1
+    -- ========================================================================
+    u_timer1: entity work.pwm_timer
+        port map (
+            clk       => clk,
+            rst       => rst,
+            cs        => timer1_cs,
+            -- Opět využíváme univerzální signál zápisu z nadřazené logiky
+            wr_en     => spi_wr_en, 
+            addr      => cpu_mem_addr(3 downto 2),
+            wr_data   => cpu_mem_wr_data,
+            rd_data   => timer1_rd_data,
+            irq_out   => timer1_irq,
+            pwm_pin   => pwm_pin_out
         );
 
 end architecture rtl;

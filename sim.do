@@ -23,6 +23,7 @@ vcom uart_tx.vhd
 vcom uart_rx.vhd
 vcom uart.vhd
 vcom spi_master.vhd
+vcom pwm_timer.vhd
 
 # 3. DATOVÁ CESTA A TOP-LEVEL (Spojují předchozí moduly dohromady)
 vcom datapath.vhd

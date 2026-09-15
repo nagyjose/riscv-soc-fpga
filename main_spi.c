@@ -20,12 +20,6 @@
 #define SPI_STATUS    *((volatile unsigned int *)0x40002004)
 #define SPI_BAUD      *((volatile unsigned int *)0x40002008)
 
-// HW PWM Timer (0x40003000)
-#define TIMER1_CTRL   *((volatile unsigned int *)0x40003000)
-#define TIMER1_PRESC  *((volatile unsigned int *)0x40003004)
-#define TIMER1_PERIOD *((volatile unsigned int *)0x40003008)
-#define TIMER1_DUTY   *((volatile unsigned int *)0x4000300C)
-
 volatile int blink_state = 0;
 volatile int target_reached = 0;
 
@@ -68,7 +62,7 @@ __attribute__((interrupt("machine"))) void trap_handler(void) {
     __asm__ volatile ("csrr %0, mcause" : "=r"(cause));
 
     // A) SDÍLENÉ EXTERNÍ PŘERUŠENÍ (Kód 11)
-    if (cause == 0x8000000B) {  
+    if (cause == 0x8000000B) { 
         
         // 1. Vyvolal to UART? (Má něco ve svém FIFO?)
         if (UART_STATUS & 0x02) { 
@@ -85,12 +79,6 @@ __attribute__((interrupt("machine"))) void trap_handler(void) {
         if (GPIO_IRQ_PEND & 0x01) {
             GPIO_IRQ_PEND = 0x01; // Smazat příznak
             target_reached = 1;   // Ukončit program
-        }
-
-        // 3. NOVÉ: Nebo to vyvolal HW Timer?
-        if (TIMER1_CTRL & 0x04) {
-            TIMER1_CTRL = 0x03; // Smazat příznak PEND (zápisem nuly na bit 2)
-            uart_putchar('*');  // Pošleme hvězdičku jako důkaz proběhlého IRQ
         }
     } 
     // B) ČASOVAČ (Kód 7)
@@ -111,27 +99,20 @@ int main() {
 
     GPIO_DIR = 0xFFFFE;
     GPIO_IRQ_MASK = 0x01;
+
     GPIO_IRQ_PEND = 0xFFFFFFFF;
     
+    // OPRAVA 1: Baud rate musí být min. 160 pro správný chod RX oversamplingu!
     // 160 taktů = 1.6 us na jeden bit
-    UART_BAUD = 50;        
+    UART_BAUD = 160;       
 
-    // Uklidníme časovač (z 20 ns na 50 mikrosekund), ať nás teď neruší
+    // OPRAVA 2: Uklidníme časovač (z 20 ns na 50 mikrosekund), ať nás teď neruší
     MTIMECMP = MTIME + 5000; 
 
     __asm__ volatile ("csrw mstatus, %0" :: "r"(0x08));
 
     // Konfigurace SPI rychlosti (např. 1 MHz při 100MHz CPU = dělička 50 pro půlperiodu)
     SPI_BAUD = 50;
-
-    // ==========================================
-    // bSTART HW TIMERU
-    // ==========================================
-    // Spustíme ho ještě před tím, než se procesor zablokuje posíláním textu
-    TIMER1_PRESC  = 10;   // Dělička 10 -> 1 tik = 100 ns
-    TIMER1_PERIOD = 200;  // Perioda 200 tiků -> 20 us
-    TIMER1_DUTY   = 50;   // Střída 50 tiků -> 5 us
-    TIMER1_CTRL   = 0x03; // Start!
 
     // Test SPI Loopbacku - pošleme znak 'S' (0x53)
     unsigned char odpoved = spi_transfer('S');
@@ -140,10 +121,6 @@ int main() {
     print("SPI Loopback test: Poslal jsem 'S', vratilo se: [");
     uart_putchar(odpoved);
     print("]\n");
-    
-    // Spustíme timer a povolíme jeho přerušení 
-    // Bit 0 (EN) = 1, Bit 1 (IRQ_EN) = 1, Bit 2 (PEND) = 0 -> hodnota 0x03
-    TIMER1_CTRL   = 0x03;
 
     while (target_reached == 0) { }
 
