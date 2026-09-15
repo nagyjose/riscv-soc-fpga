@@ -20,8 +20,9 @@ architecture sim of tb_riscv_core is
     signal spi_sck_pin  : std_logic;
     signal spi_mosi_pin : std_logic;
     signal spi_miso_pin : std_logic := '1';
-
-    signal pwm_pin_out  : std_logic;
+    
+    signal pwm1_pin_out : std_logic;
+    signal pwm2_pin_out : std_logic;
     
     signal tb_success   : std_logic;
     signal tb_error_id  : std_logic_vector(15 downto 0);
@@ -44,7 +45,8 @@ begin
             spi_sck_pin  => spi_sck_pin,
             spi_mosi_pin => spi_mosi_pin,
             spi_miso_pin => spi_miso_pin,
-            pwm_pin_out  => pwm_pin_out,
+            pwm1_pin_out => pwm1_pin_out,
+            pwm2_pin_out => pwm2_pin_out,
             tb_success   => tb_success,
             tb_error_id  => tb_error_id
         );
