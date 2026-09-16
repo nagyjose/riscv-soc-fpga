@@ -4,8 +4,9 @@ use ieee.numeric_std.all;
 
 entity riscv_core is
     port (
-        clk : in std_logic;
-        rst : in std_logic;
+        clk          : in std_logic;
+        rst          : in std_logic; -- Fyzické tlačítko
+        prog_rst_pin : in std_logic; -- Pin z USB převodníku (RTS/DTR)
         
         -- GPIO piny
         gpio_pins    : inout std_logic_vector(19 downto 0);
@@ -31,6 +32,9 @@ end entity riscv_core;
 
 architecture rtl of riscv_core is
 
+    -- Globální reset
+    signal system_rst       : std_logic;
+
     -- Vnitřní propojovací signály CPU (Sběrnice)
     signal cpu_instr_addr   : std_logic_vector(31 downto 0);
     signal cpu_instr_data   : std_logic_vector(31 downto 0);
@@ -43,6 +47,12 @@ architecture rtl of riscv_core is
     -- Signály pro RAM
     signal ram_rd_data      : std_logic_vector(31 downto 0);
     signal ram_byte_ena     : std_logic_vector(3 downto 0);
+    signal ram_instr_data   : std_logic_vector(31 downto 0);
+
+    -- Signály pro Boot ROM
+    signal rom_instr_data   : std_logic_vector(31 downto 0);
+    signal rom_rd_data      : std_logic_vector(31 downto 0);
+    signal rom_cs           : std_logic;
 
     -- Signály pro GPIO periferii
     signal gpio_rd_data     : std_logic_vector(31 downto 0);
@@ -72,7 +82,7 @@ architecture rtl of riscv_core is
     signal timer1_cs        : std_logic;
     signal timer1_irq       : std_logic;
 
-        -- Signály pro HW Timer 2
+    -- Signály pro HW Timer 2
     signal timer2_rd_data   : std_logic_vector(31 downto 0);
     signal timer2_cs        : std_logic;
     signal timer2_irq       : std_logic;
@@ -81,6 +91,17 @@ architecture rtl of riscv_core is
     signal shared_irq_ext   : std_logic;
 
 begin
+
+    -- Jádro se resetuje buď tlačítkem (v '1') nebo programátorem (v '0')
+    system_rst <= rst or (not prog_rst_pin);
+
+    -- ========================================================================
+    -- MULTIPLEXER PRO INSTRUKČNÍ SBĚRNICI (Fáze IF)
+    -- ========================================================================
+    -- Pokud PC ukazuje na 0x0000XXXX, čti instrukce z Boot ROM.
+    -- Jinak čti instrukce z hlavní RAM.
+    cpu_instr_data <= rom_instr_data when cpu_instr_addr(31 downto 28) = x"0" else
+                      ram_instr_data;
 
     -- ========================================================================
     -- 1. ADRESNÍ DEKODÉR (Sběrnicová výhybka, Nyní obsahuje i Debug Port)
@@ -98,12 +119,19 @@ begin
         spi_cs          <= '0';
         timer1_cs       <= '0';
         timer2_cs       <= '0';
+        rom_cs          <= '0';
+        ram_cs          <= '0';
         cpu_mem_rd_data <= (others => '0');
         tb_success      <= '0';
         tb_error_id     <= (others => '0');
 
-        -- A) Pokud adresa začíná nulami (0x0000XXXX) -> Směruj do RAM
-        if cpu_mem_addr(31 downto 28) = x"0" then
+        -- 1) NOVÉ: Boot ROM (0x00000000 až 0x00000FFF) - např. 4 KB
+        if cpu_mem_addr(31 downto 12) = x"00000" then
+            rom_cs <= '1';
+            cpu_mem_rd_data <= rom_rd_data;
+
+        -- A) Pokud adresa začíná 0x2000XXXX -> Směruj do RAM
+        elsif cpu_mem_addr(31 downto 28) = x"2000" then
             ram_byte_ena    <= cpu_mem_byte_ena; -- Povol zápis do RAM
             cpu_mem_rd_data <= ram_rd_data;      -- Čti z RAM
 
@@ -155,7 +183,7 @@ begin
     u_cpu_datapath: entity work.datapath
         port map (
             clk          => clk,
-            rst          => rst,
+            rst          => system_rst,
             instr_addr   => cpu_instr_addr,
             instr_data   => cpu_instr_data,
             mem_addr     => cpu_mem_addr,
@@ -170,27 +198,55 @@ begin
     shared_irq_ext <= gpio_irq or uart_irq or timer1_irq or timer2_irq;
 
     -- ========================================================================
-    -- 3. INSTANTIACE SDÍLENÉ DUAL-PORT PAMĚTI
+    -- 3. BOOT ROM (Paměť č. 1 na adrese 0x00000000 z .mif boot souboru)
     -- ========================================================================
-    u_memory: entity work.dual_port_ram
+    u_boot_rom: entity work.dual_port_ram
+        generic map (
+            RAM_SIZE_WORDS => 1024, -- 4 KB ROM
+            INIT_FILE      => "bootloader.hex" -- Zde bude zavaděč
+        )
         port map (
             clk         => clk,
             
-            -- PORT A (Instrukce CPU: Mrtvý zápis)
+            -- PORT A (Tahání instrukcí pro procesor)
             addr_a      => cpu_instr_addr,
-            wr_data_a   => (others => '0'), -- Oklamání Quartusu
-            byte_ena_a  => "0000",          -- Oklamání Quartusu (zakázán zápis)
-            rd_data_a   => cpu_instr_data,
+            wr_data_a   => (others => '0'),
+            byte_ena_a  => "0000", -- ZÁPIS TVRDĚ ZAKÁZÁN
+            rd_data_a   => rom_instr_data,
             
-            -- PORT B (Data CPU)
+            -- PORT B (Datová sběrnice - přístup CPU k datům)
+            addr_b      => cpu_mem_addr,
+            wr_data_b   => (others => '0'),
+            byte_ena_b  => "0000", -- ZÁPIS TVRDĚ ZAKÁZÁN
+            rd_data_b   => rom_rd_data
+        );
+
+    -- ========================================================================
+    -- 4. HLAVNÍ RAM (Paměť č. 2 na adrese 0x20000000 - sdílená paměť)
+    -- ========================================================================
+    u_memory: entity work.dual_port_ram
+        generic map (
+            RAM_SIZE_WORDS => 4096, -- 16 KB RAM
+            INIT_FILE      => "programm.hex"
+        )
+        port map (
+            clk         => clk,
+            
+            -- PORT A (Tahání instrukcí pro procesor)
+            addr_a      => cpu_instr_addr,
+            wr_data_a   => (others => '0'),
+            byte_ena_a  => "0000", -- Zápis instrukcí není dovolen
+            rd_data_a   => ram_instr_data,
+            
+            -- PORT B (Datová sběrnice - přístup CPU k datům vč. zápisu)
             addr_b      => cpu_mem_addr,
             wr_data_b   => cpu_mem_wr_data,
-            byte_ena_b  => ram_byte_ena,
+            byte_ena_b  => ram_byte_ena, -- Řízeno tvým dekodérem pro 0x2000
             rd_data_b   => ram_rd_data
         );
 
     -- ========================================================================
-    -- 4. INSTANTIACE GPIO PERIFERIE (Omezená na 20 pinů)
+    -- 5. INSTANTIACE GPIO PERIFERIE (Omezená na 20 pinů)
     -- ========================================================================
     gpio_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
     
@@ -200,7 +256,7 @@ begin
         )
         port map (
             clk       => clk,
-            rst       => rst,
+            rst       => system_rst,
             cs        => gpio_cs,
             wr_en     => gpio_wr_en,
             addr      => cpu_mem_addr(4 downto 2),
@@ -211,7 +267,7 @@ begin
         );
 
     -- ========================================================================
-    -- 5. INSTANTIACE MTIME ČASOVAČ
+    -- 6. INSTANTIACE MTIME ČASOVAČ
     -- ========================================================================
     timer_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
     
@@ -222,7 +278,7 @@ begin
         )
         port map (
             clk       => clk,
-            rst       => rst,
+            rst       => system_rst,
             cs        => timer_cs,
             wr_en     => timer_wr_en,
             addr      => cpu_mem_addr(2),
@@ -232,14 +288,14 @@ begin
         );
 
     -- ========================================================================
-    -- 6. INSTANTIACE UART
+    -- 7. INSTANTIACE UART
     -- ========================================================================
     uart_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
     
     u_uart: entity work.uart
         port map (
             clk       => clk,
-            rst       => rst,
+            rst       => system_rst,
             cs        => uart_cs,
             wr_en     => uart_wr_en,
             -- Pro adresy 0x00, 0x04, 0x08 bereme bity 3 a 2
@@ -252,14 +308,14 @@ begin
         );
 
     -- ========================================================================
-    -- 7. INSTANTIACE SPI MASTERA
+    -- 8. INSTANTIACE SPI MASTERA
     -- ========================================================================
     spi_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
     
     u_spi: entity work.spi_master
         port map (
             clk       => clk,
-            rst       => rst,
+            rst       => system_rst,
             cs        => spi_cs,
             wr_en     => spi_wr_en,
             addr      => cpu_mem_addr(3 downto 2),
@@ -271,12 +327,12 @@ begin
         );
 
     -- ========================================================================
-    -- 8. INSTANTIACE HW TIMERU 1
+    -- 9. INSTANTIACE HW TIMERU 1
     -- ========================================================================
     u_timer1: entity work.pwm_timer
         port map (
             clk       => clk,
-            rst       => rst,
+            rst       => system_rst,
             cs        => timer1_cs,
             -- Opět využíváme univerzální signál zápisu z nadřazené logiky
             wr_en     => spi_wr_en, 
@@ -288,12 +344,12 @@ begin
         );
 
     -- ========================================================================
-    -- 9. INSTANTIACE HW TIMERU 2
+    -- 10. INSTANTIACE HW TIMERU 2
     -- ========================================================================
     u_timer2: entity work.pwm_timer
         port map (
             clk       => clk,
-            rst       => rst,
+            rst       => system_rst,
             cs        => timer2_cs,
             -- Opět využíváme univerzální signál zápisu z nadřazené logiky
             wr_en     => spi_wr_en, 
