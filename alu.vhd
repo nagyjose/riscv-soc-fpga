@@ -20,6 +20,19 @@ end entity alu;
 architecture rtl of alu is
     -- Vnitřní signál pro uložení mezivýsledku
     signal result : std_logic_vector(31 downto 0);
+	 
+	 -- Tabulka pro masky garantuje vytvoření úsporného 5-na-32 dekodéru
+    type mask_array is array(0 to 31) of std_logic_vector(31 downto 0);
+    constant B_MASK : mask_array := (
+        0 => x"00000001", 1 => x"00000002", 2 => x"00000004", 3 => x"00000008",
+        4 => x"00000010", 5 => x"00000020", 6 => x"00000040", 7 => x"00000080",
+        8 => x"00000100", 9 => x"00000200", 10=> x"00000400", 11=> x"00000800",
+        12=> x"00001000", 13=> x"00002000", 14=> x"00004000", 15=> x"00008000",
+        16=> x"00010000", 17=> x"00020000", 18=> x"00040000", 19=> x"00080000",
+        20=> x"00100000", 21=> x"00200000", 22=> x"00400000", 23=> x"00800000",
+        24=> x"01000000", 25=> x"02000000", 26=> x"04000000", 27=> x"08000000",
+        28=> x"10000000", 29=> x"20000000", 30=> x"40000000", 31=> x"80000000"
+    );
 begin
 
     -- Kombinační proces: spustí se KDYKOLIV se změní nějaký vstup
@@ -29,7 +42,7 @@ begin
     begin
         -- Vypočítáme si pomocné proměnné pro bitové operace předem
         shamt    := to_integer(unsigned(src_b(4 downto 0)));
-        bit_mask := std_logic_vector(shift_left(to_unsigned(1, 32), shamt));
+		  bit_mask := B_MASK(shamt);
 
         case alu_ctrl is
             -- ================================================================
@@ -83,20 +96,15 @@ begin
             when "10001" => result <= src_a or  (not src_b); -- ORN
             when "10010" => result <= src_a xor (not src_b); -- XNOR
             
-            when "10011" => -- ROL (Rotate Left)
-                if shamt = 0 then result <= src_a;
-                else result <= std_logic_vector(shift_left(unsigned(src_a), shamt) or shift_right(unsigned(src_a), 32 - shamt)); end if;
-                
-            when "10100" => -- ROR (Rotate Right)
-                if shamt = 0 then result <= src_a;
-                else result <= std_logic_vector(shift_right(unsigned(src_a), shamt) or shift_left(unsigned(src_a), 32 - shamt)); end if;
+            when "10011" => result <= std_logic_vector(rotate_left(unsigned(src_a), shamt));  -- ROL (Rotate Left)
+            when "10100" => result <= std_logic_vector(rotate_right(unsigned(src_a), shamt)); -- ROR (Rotate Right)
                 
             when "10101" => result <= src_a or bit_mask;         -- BSET
             when "10110" => result <= src_a and (not bit_mask);  -- BCLR
             when "10111" => result <= src_a xor bit_mask;        -- BINV
             
             when "11000" => -- BEXT (Bit Extract: Posuneme bit na pozici 0 a zbytek zamaskujeme)
-                result <= std_logic_vector(shift_right(unsigned(src_a), shamt) and x"00000001");
+					 result <= std_logic_vector(shift_right(unsigned(src_a), shamt)) and x"00000001";
                 
             when "11001" => -- REV8 (Byte Reverse)
                 result <= src_a(7 downto 0) & src_a(15 downto 8) & src_a(23 downto 16) & src_a(31 downto 24);
