@@ -18,109 +18,150 @@ entity alu is
 end entity alu;
 
 architecture rtl of alu is
-    -- Vnitřní signál pro uložení mezivýsledku
-    signal result : std_logic_vector(31 downto 0);
-	 
-	 -- Tabulka pro masky garantuje vytvoření úsporného 5-na-32 dekodéru
-    type mask_array is array(0 to 31) of std_logic_vector(31 downto 0);
-    constant B_MASK : mask_array := (
-        0 => x"00000001", 1 => x"00000002", 2 => x"00000004", 3 => x"00000008",
-        4 => x"00000010", 5 => x"00000020", 6 => x"00000040", 7 => x"00000080",
-        8 => x"00000100", 9 => x"00000200", 10=> x"00000400", 11=> x"00000800",
-        12=> x"00001000", 13=> x"00002000", 14=> x"00004000", 15=> x"00008000",
-        16=> x"00010000", 17=> x"00020000", 18=> x"00040000", 19=> x"00080000",
-        20=> x"00100000", 21=> x"00200000", 22=> x"00400000", 23=> x"00800000",
-        24=> x"01000000", 25=> x"02000000", 26=> x"04000000", 27=> x"08000000",
-        28=> x"10000000", 29=> x"20000000", 30=> x"40000000", 31=> x"80000000"
-    );
+
+    function bit_reverse(v : std_logic_vector(31 downto 0)) return std_logic_vector is
+        variable res : std_logic_vector(31 downto 0);
+    begin
+        for i in 0 to 31 loop
+            res(i) := v(31 - i);
+        end loop;
+        return res;
+    end function;
+
+    -- 1. Jednotná Aritmetika (ADD, SUB, SLT, SLTU)
+    signal is_sub        : std_logic;
+    signal is_signed_cmp : std_logic;
+    signal a_ext         : std_logic_vector(32 downto 0);
+    signal b_ext         : std_logic_vector(32 downto 0);
+    signal b_inv         : std_logic_vector(32 downto 0);
+    signal adder_res     : unsigned(32 downto 0);
+    signal arith_res     : std_logic_vector(31 downto 0);
+
+    -- 2. Jednotná Logika (AND, OR, XOR, ANDN, ORN, XNOR, BSET, BCLR, BINV)
+    signal bit_mask      : std_logic_vector(31 downto 0);
+    signal b_logic_raw   : std_logic_vector(31 downto 0);
+    signal b_logic       : std_logic_vector(31 downto 0);
+    signal invert_b      : std_logic;
+    signal logic_res     : std_logic_vector(31 downto 0);
+
+    -- 3. Jednotný 5stupňový Barrel Shifter (SLL, SRL, SRA, ROL, ROR, BEXT)
+    signal is_left       : std_logic;
+    signal is_rotate     : std_logic;
+    signal is_sra        : std_logic;
+    signal shift_in      : std_logic_vector(31 downto 0);
+    signal high_32       : std_logic_vector(31 downto 0);
+    signal ext_shift     : std_logic_vector(63 downto 0);
+    signal shamt         : std_logic_vector(4 downto 0);
+    signal stg4          : std_logic_vector(47 downto 0);
+    signal stg3          : std_logic_vector(39 downto 0);
+    signal stg2          : std_logic_vector(35 downto 0);
+    signal stg1          : std_logic_vector(33 downto 0);
+    signal stg0          : std_logic_vector(31 downto 0);
+    signal shifter_res   : std_logic_vector(31 downto 0);
+    
+    -- 4. Výstupní MUX
+    signal out_mux_sel   : std_logic_vector(1 downto 0);
+    signal other_res     : std_logic_vector(31 downto 0);
+
+    signal result        : std_logic_vector(31 downto 0);
+
 begin
 
-    -- Kombinační proces: spustí se KDYKOLIV se změní nějaký vstup
-    process(src_a, src_b, alu_ctrl)
-        variable shamt    : integer range 0 to 31;
-        variable bit_mask : std_logic_vector(31 downto 0);
+    -- ========================================================================
+    -- 1. SDÍLENÁ ARITMETICKÁ JEDNOTKA (Jediná 33bitová sčítačka)
+    -- ========================================================================
+    is_sub        <= '1' when (alu_ctrl = "00001" or alu_ctrl = "01000" or alu_ctrl = "01001") else '0';
+    is_signed_cmp <= '1' when (alu_ctrl = "01000") else '0';
+
+    a_ext <= (src_a(31) and is_signed_cmp) & src_a;
+    b_ext <= (src_b(31) and is_signed_cmp) & src_b;
+    b_inv <= not b_ext when is_sub = '1' else b_ext;
+
+    process(a_ext, b_inv, is_sub)
+        variable cin : unsigned(32 downto 0);
     begin
-        -- Vypočítáme si pomocné proměnné pro bitové operace předem
-        shamt    := to_integer(unsigned(src_b(4 downto 0)));
-		  bit_mask := B_MASK(shamt);
-
-        case alu_ctrl is
-            -- ================================================================
-            -- Základní instrukce RV32I
-            -- ================================================================
-            when "00000" => -- Sčítání (ADD)
-                -- Musíme přetypovat std_logic_vector na unsigned, sečíst a vrátit zpět
-                result <= std_logic_vector(unsigned(src_a) + unsigned(src_b));
-                
-            when "00001" => -- Odčítání (SUB)
-                result <= std_logic_vector(unsigned(src_a) - unsigned(src_b));
-                
-            when "00010" => -- Logický součin (AND)
-                result <= src_a and src_b;
-                
-            when "00011" => -- Logický součet (OR)
-                result <= src_a or src_b;
-                
-            when "00100" => -- Exkluzivní součet (XOR)
-                result <= src_a xor src_b;
-                
-            when "00101" => -- Logický posun vlevo (SLL)
-                -- Posouváme src_a. O kolik bitů? To říká spodních 5 bitů src_b.
-                result <= std_logic_vector(shift_left(unsigned(src_a), to_integer(unsigned(src_b(4 downto 0)))));
-                
-            when "00110" => -- Logický posun vpravo (SRL)
-                result <= std_logic_vector(shift_right(unsigned(src_a), to_integer(unsigned(src_b(4 downto 0)))));
-                
-            when "00111" => -- Aritmetický posun vpravo (SRA - zachovává znaménko)
-                -- Všimni si, že src_a přetypujeme na SIGNED (znaménkové číslo)
-                result <= std_logic_vector(shift_right(signed(src_a), to_integer(unsigned(src_b(4 downto 0)))));
-                
-            when "01000" => -- Nastav 1, pokud je menší (SLT - signed)
-                if signed(src_a) < signed(src_b) then
-                    result <= x"00000001"; -- Hexadecimální zápis 32bitové jedničky
-                else
-                    result <= x"00000000";
-                end if;
-                
-            when "01001" => -- Nastav 1, pokud je menší (SLTU - unsigned)
-                if unsigned(src_a) < unsigned(src_b) then
-                    result <= x"00000001";
-                else
-                    result <= x"00000000";
-                end if;
-
-            -- ================================================================
-            -- Rozšířené instrukce (Zbb a Zbs rozšíření)
-            -- ================================================================
-            when "10000" => result <= src_a and (not src_b); -- ANDN
-            when "10001" => result <= src_a or  (not src_b); -- ORN
-            when "10010" => result <= src_a xor (not src_b); -- XNOR
-            
-            when "10011" => result <= std_logic_vector(rotate_left(unsigned(src_a), shamt));  -- ROL (Rotate Left)
-            when "10100" => result <= std_logic_vector(rotate_right(unsigned(src_a), shamt)); -- ROR (Rotate Right)
-                
-            when "10101" => result <= src_a or bit_mask;         -- BSET
-            when "10110" => result <= src_a and (not bit_mask);  -- BCLR
-            when "10111" => result <= src_a xor bit_mask;        -- BINV
-            
-            when "11000" => -- BEXT (Bit Extract: Posuneme bit na pozici 0 a zbytek zamaskujeme)
-					 result <= std_logic_vector(shift_right(unsigned(src_a), shamt)) and x"00000001";
-                
-            when "11001" => -- REV8 (Byte Reverse)
-                result <= src_a(7 downto 0) & src_a(15 downto 8) & src_a(23 downto 16) & src_a(31 downto 24);
-            
-            when "11111" => -- PASS_B (Záchrana pro LUI)
-                result <= src_b;
-            
-            when others =>
-                result <= (others => '0'); -- Pojistka proti neznámému kódu
-        end case;
+        cin := (others => '0');
+        cin(0) := is_sub;
+        adder_res <= unsigned(a_ext) + unsigned(b_inv) + cin;
     end process;
 
-    -- Propojení vnitřního signálu na reálný výstup
-    alu_res <= result;
+    arith_res <= (31 downto 1 => '0') & adder_res(32) when (alu_ctrl = "01000" or alu_ctrl = "01001")
+                 else std_logic_vector(adder_res(31 downto 0));
+
+    -- ========================================================================
+    -- 2. SDÍLENÁ LOGICKÁ JEDNOTKA
+    -- ========================================================================
+    process(src_b)
+        variable idx : integer range 0 to 31;
+    begin
+        idx := to_integer(unsigned(src_b(4 downto 0)));
+        bit_mask <= (others => '0');
+        bit_mask(idx) <= '1';
+    end process;
+
+    b_logic_raw <= bit_mask when (alu_ctrl = "10101" or alu_ctrl = "10110" or alu_ctrl = "10111") else src_b;
+    invert_b    <= '1' when (alu_ctrl = "10000" or alu_ctrl = "10001" or alu_ctrl = "10010" or alu_ctrl = "10110") else '0';
+    b_logic     <= not b_logic_raw when invert_b = '1' else b_logic_raw;
+
+    process(src_a, b_logic, alu_ctrl)
+    begin
+        if (alu_ctrl = "00010" or alu_ctrl = "10000" or alu_ctrl = "10110") then
+            logic_res <= src_a and b_logic;
+        elsif (alu_ctrl = "00011" or alu_ctrl = "10001" or alu_ctrl = "10101") then
+            logic_res <= src_a or b_logic;
+        else
+            logic_res <= src_a xor b_logic;
+        end if;
+    end process;
+
+    -- ========================================================================
+    -- 3. JEDNOTNÝ 5STUPŇOVÝ BARREL SHIFTER (Pravý posuvník se zrcadlením)
+    -- ========================================================================
+    is_left   <= '1' when (alu_ctrl = "00101" or alu_ctrl = "10011") else '0';
+    is_rotate <= '1' when (alu_ctrl = "10011" or alu_ctrl = "10100") else '0';
+    is_sra    <= '1' when (alu_ctrl = "00111") else '0';
+
+    shift_in <= bit_reverse(src_a) when is_left = '1' else src_a;
+
+    high_32 <= shift_in                 when is_rotate = '1' else
+               (others => shift_in(31)) when is_sra = '1' else
+               (others => '0');
+
+    ext_shift <= high_32 & shift_in;
+    shamt     <= src_b(4 downto 0);
+
+    -- 5 diskrétních multiplexních stupňů
+    stg4 <= ext_shift(63 downto 16) when shamt(4) = '1' else ext_shift(47 downto 0);
+    stg3 <= stg4(47 downto 8)       when shamt(3) = '1' else stg4(39 downto 0);
+    stg2 <= stg3(39 downto 4)       when shamt(2) = '1' else stg3(35 downto 0);
+    stg1 <= stg2(35 downto 2)       when shamt(1) = '1' else stg2(33 downto 0);
+    stg0 <= stg1(32 downto 1)       when shamt(0) = '1' else stg1(31 downto 0);
+
+    shifter_res <= bit_reverse(stg0)               when is_left = '1' else
+                   ((31 downto 1 => '0') & stg0(0)) when alu_ctrl = "11000" else
+                   stg0;
+
+	-- ========================================================================
+	-- 4. HIERARCHICKÝ VÝSTUPNÍ MULTIPLEXER (Optimalizace pro 4-LUT)
+	-- ========================================================================
+	-- Dekódování kategorie instrukce do pouhých 2 bitů
+	out_mux_sel <= 
+        "00" when (alu_ctrl = "00000" or alu_ctrl = "00001" or alu_ctrl = "01000" or alu_ctrl = "01001") else
+        "01" when (alu_ctrl = "00101" or alu_ctrl = "00110" or alu_ctrl = "00111" or alu_ctrl = "10011" or alu_ctrl = "10100" or alu_ctrl = "11000") else
+        "10" when (alu_ctrl = "11001" or alu_ctrl = "11111") else
+        "11"; -- Logické operace
+	
+    -- Sdílený blok pro REV8 a PASS_B
+    other_res <= (src_a(7 downto 0) & src_a(15 downto 8) & src_a(23 downto 16) & src_a(31 downto 24)) when alu_ctrl = "11001" else src_b;
     
-    -- Zero flag: Nastaví se na '1', pokud je výsledek přesně 0
+    -- Finální 4-to-1 hardwarový MUX
+    with out_mux_sel select result <=
+        arith_res   when "00",
+        shifter_res when "01",
+        other_res   when "10",
+        logic_res   when others;   
+
+    alu_res   <= result;
     zero_flag <= '1' when result = x"00000000" else '0';
 
 end architecture rtl;
