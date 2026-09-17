@@ -2,8 +2,8 @@
 .global _start
 
 _start:
-    /* Nastavení Stack Pointeru (sp) na konec naší 8KB RAM (2048 slov * 4 = 8192) */
-    li sp, 8192
+    /* Konec RAM = 0x20000000 + 11 KB (0x2C00) */
+    li sp, 0x20002C00
     call main
     
 end_loop:

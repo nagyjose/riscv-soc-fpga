@@ -18,6 +18,12 @@ int uart_getc_timeout(char *c) {
     return 0; 
 }
 
+// Bezpečné čekání na znak
+unsigned char uart_getc() {
+    while ((UART_STATUS & 0x02) == 0); 
+    return (unsigned char)UART_DATA;
+}
+
 void main() {
     UART_BAUD = 868; // Nastavíme 115200 (předpoklad: 100MHz / 115200)
 
@@ -40,8 +46,7 @@ void main() {
             
             for (int i = 0; i < app_size; i++) {
                 // Zde už neřešíme timeout, Python skript chrlí data
-                while ((UART_STATUS & 0x02) == 0); 
-                *ram_pointer = (unsigned char)UART_DATA;
+                *ram_pointer = uart_getc();
                 ram_pointer++;
             }
             // Můžeme poslat znak potvrzení 'K', že je vše uloženo

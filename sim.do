@@ -29,10 +29,6 @@ vcom pwm_timer.vhd
 vcom datapath.vhd
 vcom riscv_core.vhd
 
-# 4. SIMULAČNÍ PAMĚTI
-vcom inst_rom.vhd
-vcom data_ram.vhd
-
 # 5. TESTBENCH (Úplně nakonec)
 vcom tb_riscv_core.vhd
 
