@@ -31,13 +31,15 @@ architecture rtl of datapath is
     
     -- 1. Fáze IF/ID (Mezi čtením instrukce a dekódováním)
     type if_id_reg_t is record
-        pc    : std_logic_vector(31 downto 0);
-        instr : std_logic_vector(31 downto 0);
+        pc         : std_logic_vector(31 downto 0);
+        pc_plus_4  : std_logic_vector(31 downto 0);
+        instr      : std_logic_vector(31 downto 0);
     end record;
 
     -- 2. Fáze ID/EX (Mezi dekodérem a ALU)
     type id_ex_reg_t is record
         pc         : std_logic_vector(31 downto 0);
+        pc_plus_4  : std_logic_vector(31 downto 0);
         funct3     : std_logic_vector(2 downto 0);
         reg_data1  : std_logic_vector(31 downto 0);
         reg_data2  : std_logic_vector(31 downto 0);
@@ -258,20 +260,23 @@ begin
         );
 
     -- 0. Zjištění skutečného výsledku z fáze MEM (pro zkratky)
-    -- Poznámka: res_src="01" (Load z RAM) tu není, protože paměť má vždy Load-Use stall (1 takt)
-    mem_result <= ex_mem.pc_plus_4 when ex_mem.res_src = "10" else -- Návratová adresa JAL
-                  ex_mem.csr_rdata when ex_mem.res_src = "11" else -- Přečtená data z CSR
-                  ex_mem.alu_res;                                  -- Běžný výpočet
+    -- Poznámka: res_src="01" (Load z RAM) tu není, protože paměť má vždy Load-Use stall (1 takt)                                 
+    with ex_mem.res_src select mem_result <=  
+        ex_mem.pc_plus_4 when "10",   -- Návratová adresa JAL
+        ex_mem.csr_rdata when "11",   -- Přečtená data z CSR
+        ex_mem.alu_res   when others; -- Běžný výpočet
 
-    -- 1. Zkratka pro Operand A
-    alu_src_a_fw <= mem_result     when forward_a = "10" else -- Zkratka z fáze MEM
-                    wb_result      when forward_a = "01" else -- Zkratka z fáze WB
-                    id_ex.reg_data1;                          -- Normální čtení z registru
+    -- 1. Zkratka pro Operand A                       
+    with forward_a select alu_src_a_fw <=
+        mem_result      when "10",   -- Zkratka z fáze MEM
+        wb_result       when "01",   -- Zkratka z fáze WB
+        id_ex.reg_data1 when others; -- Normální čtení z registru
 
-    -- 2. Zkratka pro Operand B (před rozhodnutím o konstantě!)
-    alu_src_b_fw <= mem_result     when forward_b = "10" else
-                    wb_result      when forward_b = "01" else
-                    id_ex.reg_data2;
+    -- 2. Zkratka pro Operand B (před rozhodnutím o konstantě)
+    with forward_b select alu_src_b_fw <=
+        mem_result      when "10",
+        wb_result       when "01",
+        id_ex.reg_data2 when others;
 
     -- 3. Multiplexer před ALU: Registr vs. Konstanta
     ex_alu_src_a <= id_ex.pc  when id_ex.alu_src_a = '1' else alu_src_a_fw;
@@ -364,10 +369,11 @@ begin
     -- ========================================================================
     -- D. WRITE-BACK MULTIPLEXER (Co se zapíše zpět do registru?)
     -- ========================================================================
-    wb_result <= mem_wb.mem_data  when mem_wb.res_src = "01" else 
-                 mem_wb.pc_plus_4 when mem_wb.res_src = "10" else -- Návratová adresa JAL
-                 mem_wb.csr_rdata when mem_wb.res_src = "11" else -- Data z CSR
-                 mem_wb.alu_res;
+    with mem_wb.res_src select wb_result <=
+        mem_wb.mem_data  when "01",
+        mem_wb.pc_plus_4 when "10", -- Návratová adresa JAL
+        mem_wb.csr_rdata when "11", -- Data z CSR
+        mem_wb.alu_res   when others;
 
     -- ========================================================================
     -- E. LOGIKA PROGRAM COUNTERU (PC) A SKOKŮ
@@ -375,7 +381,7 @@ begin
     
     -- 1. Normální krok: PC + 4
     -- Adresu posouváme vždy z aktuální hodnoty PC
-    pc_plus_4 <= std_logic_vector(unsigned(pc_current) + to_unsigned(4, 32));
+    pc_plus_4 <= std_logic_vector(unsigned(pc_current) + 4);
 
     -- 2. Cílová adresa pro skok
     -- Počítá se ve fázi EX: Instrukce, která skok vyvolala, leží v registru id_ex.
@@ -387,14 +393,21 @@ begin
     -- U JALR je cílem vypočtená adresa z ALU se smazaným nultým bitem.
     -- Ostatní skoky (JAL, Branch) používají normální pc_target.
     -- Trap a MRET mají absolutní prioritu nad čímkoliv jiným!
-    pc_next <=  trap_target                     when trap_fire = '1'     else
-                epc_out                         when id_ex.is_mret = '1' else
-                (ex_alu_res(31 downto 1) & '0') when id_ex.jalr = '1'    else 
-                pc_target                       when pc_src = '1'        else 
-                pc_plus_4;
-    
-    -- A jako bonus vyvedeme aktuální PC ven z procesoru do Instrukční paměti ROM
-    instr_addr <= pc_current;
+    process(trap_fire, trap_target, id_ex.is_mret, epc_out, id_ex.jalr, ex_alu_res, pc_src, pc_target, pc_plus_4)
+    begin
+        if trap_fire = '1' then
+            pc_next <= trap_target;
+        elsif id_ex.is_mret = '1' then
+            pc_next <= epc_out;
+        elsif id_ex.jalr = '1' then
+            pc_next <= ex_alu_res(31 downto 1) & '0';
+        elsif pc_src = '1' then
+            pc_next <= pc_target;
+        else
+            pc_next <= pc_plus_4;
+        end if;
+    end process;
+
 
     -- ========================================================================
     -- F. HLAVNÍ HODINOVÝ PROCES (Tlukot srdce procesoru)
@@ -424,11 +437,13 @@ begin
                 -- 2. PŘEKLOPENÍ DO FÁZE IF/ID (S možností výmazu)
                 -- ==========================================================
                 if (flush_if_id = '1') or (trap_fire = '1') or (id_ex.is_mret = '1') then
-                    if_id.instr <= (others => '0'); -- NOP instrukce
-                    if_id.pc    <= (others => '0');
+                    if_id.instr     <= (others => '0'); -- NOP instrukce
+                    if_id.pc        <= (others => '0');
+                    if_id.pc_plus_4 <= (others => '0');
                 elsif stall_if_id = '0' then -- Zápis pouze pokud nebrzdíme 
-                    if_id.pc    <= pc_current;
-                    if_id.instr <= instr_data;
+                    if_id.instr     <= instr_data;
+                    if_id.pc        <= pc_current;
+                    if_id.pc_plus_4 <= pc_plus_4;
                 end if;
 
                 -- ==========================================================
@@ -468,7 +483,6 @@ begin
                     id_ex.alu_ctrl   <= id_alu_ctrl;
                     id_ex.alu_src    <= id_alu_src;
                     id_ex.md_req     <= id_md_req;
-                    -- ... atd.
                 end if;
 
                 -- ==========================================================
@@ -487,9 +501,8 @@ begin
                     ex_mem.res_src   <= id_ex.res_src;
                     ex_mem.mem_write <= id_ex.mem_write;
                     
-                    ex_mem.pc_plus_4 <= std_logic_vector(unsigned(id_ex.pc) + 4); -- Návratová adresa do paměťové fáze
+                    ex_mem.pc_plus_4 <= id_ex.pc_plus_4; -- Návratová adresa do paměťové fáze
                     ex_mem.funct3    <= id_ex.funct3;
-                    ex_mem.csr_rdata <= ex_csr_rdata;
                 end if;
 
                 -- ==========================================================
