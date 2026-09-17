@@ -34,10 +34,15 @@ entity dual_port_ram is
 end entity dual_port_ram;
 
 architecture rtl of dual_port_ram is
-    signal wren_a : std_logic;
-    signal wren_b : std_logic;
+    signal wren_a  : std_logic;
+    signal wren_b  : std_logic;
+	 signal clk_inv : std_logic;
+	 
 begin
 
+    -- Invertované hodiny (Souběžný zápis)
+    clk_inv <= not clk;
+	 
     -- Altsyncram má pro zápis jediný bit (wren). Byte Enables ho doplňují.
     wren_a <= '1' when byte_ena_a /= "0000" else '0';
     wren_b <= '1' when byte_ena_b /= "0000" else '0';
@@ -69,7 +74,7 @@ begin
         byteena_reg_b             => "CLOCK0"
     )
     port map (
-        clock0    => clk,
+        clock0    => clk_inv,
         
         -- Dynamické oříznutí adresy zamezuje přetečení!
         address_a => addr_a(ADDR_WIDTH + 1 downto 2),

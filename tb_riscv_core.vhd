@@ -69,29 +69,36 @@ begin
     end process;
 
     -- ========================================================================
-    -- 3. VYHODNOCENÍ DEBUG PORTU
+    -- 3. CENTRÁLNÍ MONITOR (Řeší Úspěch i Timeout z jednoho místa!)
     -- ========================================================================
-    -- Místo "failure" jen vypíšeme "note" a zvedneme vlajku
-    process(clk)
+    monitor: process
     begin
-        if rising_edge(clk) then
-            if tb_success = '1' then
-                report LF & "==========================================" & LF &
-                            "  [ SUCCESS ] Bootloader skocil do RAM!" & LF &
-                            "==========================================" severity note;
-                sim_done <= true; -- Vypne hodiny!
-            end if;
+        -- Čeká na úspěch z Debug Portu, ale maximálně 10 milisekund
+        wait until tb_success = '1' for 10 ms;
+        
+        if tb_success = '1' then
+            report LF & "==========================================" & LF &
+                        "  [ SUCCESS ] Bootloader skocil do RAM!" & LF &
+                        "==========================================" severity note;
+        else
+            report LF & "==========================================" & LF &
+                        "  [ TIMEOUT ] Aplikace nedobehla vcas!" & LF &
+                        "==========================================" severity note;
         end if;
+        
+        -- Zde je JEDINÝ zdroj (driver), který ovlivňuje sim_done
+        sim_done <= true; 
+        wait;
     end process;
 
     -- ========================================================================
-    -- SIMULACE SPI SLAVE ZAŘÍZENÍ (Hardwarový Loopback)
+    -- 4. SIMULACE SPI SLAVE ZAŘÍZENÍ (Hardwarový Loopback)
     -- ========================================================================
     -- Cokoliv procesor pošle na MOSI, to se mu okamžitě vrátí na MISO.
     spi_miso_pin <= spi_mosi_pin;
 
     -- ========================================================================
-    -- 4. HLAVNÍ SIMULAČNÍ SCÉNÁŘ (Pouze startovací sekvence)
+    -- 5. HLAVNÍ SIMULAČNÍ SCÉNÁŘ (Pouze startovací sekvence)
     -- ========================================================================
     stimulus: process
         -- VHDL Procedura chovající se jako odesílací skript na PC
@@ -138,13 +145,8 @@ begin
         -- Teď by měl Bootloader poslat 'K' (0x4B) a skočit do `main.c`.
         -- `main.c` zapíše na Debug Port a vyvolá SUCCESS!
         
-        -- Timeout bez diakritiky
-        wait for 10 ms; 
-        if not sim_done then report LF &
-                            "==========================================" & LF &
-                            "  [TIMEOUT] Simulace bezela moc dlouho!" & LF &
-                            "==========================================" severity failure;
-        end if;
+        -- Proces končí, o zbytek a ukončení simulace se postará centrální monitor
+        wait;
     end process;
 
 end architecture sim;
