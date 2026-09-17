@@ -61,6 +61,7 @@ architecture rtl of alu is
     
     -- 4. Výstupní MUX
     signal out_mux_sel   : std_logic_vector(1 downto 0);
+    signal bext_res      : std_logic_vector(31 downto 0);
     signal other_res     : std_logic_vector(31 downto 0);
 
     signal result        : std_logic_vector(31 downto 0);
@@ -137,9 +138,8 @@ begin
     stg1 <= stg2(35 downto 2)       when shamt(1) = '1' else stg2(33 downto 0);
     stg0 <= stg1(32 downto 1)       when shamt(0) = '1' else stg1(31 downto 0);
 
-    shifter_res <= bit_reverse(stg0)               when is_left = '1' else
-                   ((31 downto 1 => '0') & stg0(0)) when alu_ctrl = "11000" else
-                   stg0;
+    -- Z BEXT odstraněna závislost na shifteru!
+    shifter_res <= bit_reverse(stg0) when is_left = '1' else stg0;
 
 	-- ========================================================================
 	-- 4. HIERARCHICKÝ VÝSTUPNÍ MULTIPLEXER (Optimalizace pro 4-LUT)
@@ -150,9 +150,14 @@ begin
         "01" when (alu_ctrl = "00101" or alu_ctrl = "00110" or alu_ctrl = "00111" or alu_ctrl = "10011" or alu_ctrl = "10100" or alu_ctrl = "11000") else
         "10" when (alu_ctrl = "11001" or alu_ctrl = "11111") else
         "11"; -- Logické operace
+    
+    -- Izolovaný 32-na-1 drátový MUX pro BEXT (Stojí zlomek LE oproti průchodu shifterem)
+    bext_res <= (31 downto 1 => '0') & src_a(to_integer(unsigned(shamt)));
 	
-    -- Sdílený blok pro REV8 a PASS_B
-    other_res <= (src_a(7 downto 0) & src_a(15 downto 8) & src_a(23 downto 16) & src_a(31 downto 24)) when alu_ctrl = "11001" else src_b;
+    -- Sdílený blok pro REV8, BEXT a PASS_B
+    other_res <= (src_a(7 downto 0) & src_a(15 downto 8) & src_a(23 downto 16) & src_a(31 downto 24)) when alu_ctrl = "11001" else 
+                 bext_res when alu_ctrl = "11000" else
+                 src_b;
     
     -- Finální 4-to-1 hardwarový MUX
     with out_mux_sel select result <=
