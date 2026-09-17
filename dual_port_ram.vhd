@@ -1,25 +1,31 @@
 library ieee;
 use ieee.std_logic_1164.all;
-use ieee.numeric_std.all;
 
--- synthesis translate_off
-use std.textio.all;
-use ieee.std_logic_textio.all;
--- synthesis translate_on
+-- Knihovna Altera pro přímý přístup k hardwarovým MegaFunkcím (M4K blokům)
+library altera_mf;
+use altera_mf.altera_mf_components.all;
 
 entity dual_port_ram is
     generic (
-        RAM_SIZE_WORDS : integer := 2048;
-        -- 1. ZMĚNA: Pro ModelSim MUSÍME číst surový .hex soubor!
-        INIT_FILE      : string  := "program.hex"
+        -- Namísto počtu slov předáváme šířku adresy, abychom zamezili přetékání
+        -- 10 = 1024 slov (4 KB ROM)
+        -- 12 = 4096 slov (16 KB RAM)
+        ADDR_WIDTH : integer := 12;   -- Šířka adresní sběrnice (12 bitů = až 4096)
+        RAM_WORDS  : integer := 2816; -- Fyzický počet slov (2816 = 22 bloků)
+        
+        -- Altsyncram umí zpracovat .mif i během simulace v ModelSimu!
+        INIT_FILE  : string  := "program.mif" 
     );
     port (
         clk         : in  std_logic;
+        
+        -- PORT A (Instrukce)
         addr_a      : in  std_logic_vector(31 downto 0);
         wr_data_a   : in  std_logic_vector(31 downto 0);
         byte_ena_a  : in  std_logic_vector(3 downto 0);
         rd_data_a   : out std_logic_vector(31 downto 0);
         
+        -- PORT B (Data)
         addr_b      : in  std_logic_vector(31 downto 0);
         wr_data_b   : in  std_logic_vector(31 downto 0);
         byte_ena_b  : in  std_logic_vector(3 downto 0);
@@ -28,75 +34,55 @@ entity dual_port_ram is
 end entity dual_port_ram;
 
 architecture rtl of dual_port_ram is
-    type ram_type is array (0 to RAM_SIZE_WORDS - 1) of std_logic_vector(31 downto 0);
-
-    -- ========================================================================
-    -- FUNKCE POUZE PRO SIMULACI (Quartus tuto funkci vůbec neuvidí)
-    -- ========================================================================
-    -- synthesis translate_off
-    impure function init_ram(filename : string) return ram_type is
-        variable ram_content : ram_type := (others => (others => '0'));
-        file     text_file   : text open read_mode is filename;
-        variable text_line   : line;
-        variable temp_word   : std_logic_vector(31 downto 0);
-        variable mem_idx     : integer := 0;
-    begin
-        while not endfile(text_file) and mem_idx < RAM_SIZE_WORDS loop
-            readline(text_file, text_line);
-            if text_line.all'length > 0 then
-                hread(text_line, temp_word);
-                ram_content(mem_idx) := temp_word;
-                mem_idx := mem_idx + 1;
-            end if;
-        end loop;
-        return ram_content;
-    end function;
-    -- synthesis translate_on
-
-    -- ========================================================================
-    -- DEKLARACE PAMĚTI (Oddělení simulace a syntézy)
-    -- ========================================================================
-    
-    -- A) TOTO VIDÍ JEN MODELSIM: Paměť inicializovaná VHDL funkcí z .hex souboru
-    -- synthesis translate_off
-    signal ram : ram_type := init_ram(INIT_FILE);
-    -- synthesis translate_on
-
-    -- B) TOTO VIDÍ JEN QUARTUS: Čistá neinicializovaná paměť (Dokonalá šablona pro M4K)
-    -- synthesis read_comments_as_HDL on
-    -- signal ram : ram_type;
-    -- synthesis read_comments_as_HDL off
-
-    -- C) ATRIBUTY PRO QUARTUS: Běžný kód (ModelSim je ignoruje)
-    attribute ram_init_file : string;
-    attribute ram_init_file of ram : signal is "program.mif";
-    
-    attribute ramstyle : string;
-    attribute ramstyle of ram : signal is "M4K";
-    
-    signal word_addr_a : integer range 0 to RAM_SIZE_WORDS - 1;
-    signal word_addr_b : integer range 0 to RAM_SIZE_WORDS - 1;
-
+    signal wren_a : std_logic;
+    signal wren_b : std_logic;
 begin
-    word_addr_a <= to_integer(unsigned(addr_a(12 downto 2)));
-    word_addr_b <= to_integer(unsigned(addr_b(12 downto 2)));
 
-    process(clk)
-    begin
-        if falling_edge(clk) then
-            -- PORT A (Symetrický)
-            if byte_ena_a(0) = '1' then ram(word_addr_a)(7 downto 0)   <= wr_data_a(7 downto 0);   end if;
-            if byte_ena_a(1) = '1' then ram(word_addr_a)(15 downto 8)  <= wr_data_a(15 downto 8);  end if;
-            if byte_ena_a(2) = '1' then ram(word_addr_a)(23 downto 16) <= wr_data_a(23 downto 16); end if;
-            if byte_ena_a(3) = '1' then ram(word_addr_a)(31 downto 24) <= wr_data_a(31 downto 24); end if;
-            rd_data_a <= ram(word_addr_a);
-            
-            -- PORT B (Symetrický)
-            if byte_ena_b(0) = '1' then ram(word_addr_b)(7 downto 0)   <= wr_data_b(7 downto 0);   end if;
-            if byte_ena_b(1) = '1' then ram(word_addr_b)(15 downto 8)  <= wr_data_b(15 downto 8);  end if;
-            if byte_ena_b(2) = '1' then ram(word_addr_b)(23 downto 16) <= wr_data_b(23 downto 16); end if;
-            if byte_ena_b(3) = '1' then ram(word_addr_b)(31 downto 24) <= wr_data_b(31 downto 24); end if;
-            rd_data_b <= ram(word_addr_b);
-        end if;
-    end process;
+    -- Altsyncram má pro zápis jediný bit (wren). Byte Enables ho doplňují.
+    wren_a <= '1' when byte_ena_a /= "0000" else '0';
+    wren_b <= '1' when byte_ena_b /= "0000" else '0';
+
+    -- Instanciace fyzického křemíkového bloku
+    u_altsyncram : altsyncram
+    generic map (
+        operation_mode            => "BIDIR_DUAL_PORT",
+        ram_block_type            => "M4K",
+        init_file                 => INIT_FILE,
+        
+        numwords_a                => RAM_WORDS,
+        numwords_b                => RAM_WORDS,
+        
+        width_a                   => 32,
+        widthad_a                 => ADDR_WIDTH,
+        width_byteena_a           => 4,
+        outdata_reg_a             => "UNREGISTERED",
+        
+        width_b                   => 32,
+        widthad_b                 => ADDR_WIDTH,
+        width_byteena_b           => 4,
+        outdata_reg_b             => "UNREGISTERED",
+        
+        -- Na FPGA Cyclone musí PORT B běžet na stejných hodinách jako PORT A
+        address_reg_b             => "CLOCK0",
+        indata_reg_b              => "CLOCK0",
+        wrcontrol_wraddress_reg_b => "CLOCK0",
+        byteena_reg_b             => "CLOCK0"
+    )
+    port map (
+        clock0    => clk,
+        
+        -- Dynamické oříznutí adresy zamezuje přetečení!
+        address_a => addr_a(ADDR_WIDTH + 1 downto 2),
+        data_a    => wr_data_a,
+        byteena_a => byte_ena_a,
+        wren_a    => wren_a,
+        q_a       => rd_data_a,
+        
+        address_b => addr_b(ADDR_WIDTH + 1 downto 2),
+        data_b    => wr_data_b,
+        byteena_b => byte_ena_b,
+        wren_b    => wren_b,
+        q_b       => rd_data_b
+    );
+
 end architecture rtl;

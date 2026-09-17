@@ -52,7 +52,6 @@ architecture rtl of riscv_core is
     -- Signály pro Boot ROM
     signal rom_instr_data   : std_logic_vector(31 downto 0);
     signal rom_rd_data      : std_logic_vector(31 downto 0);
-    signal rom_cs           : std_logic;
 
     -- Signály pro GPIO periferii
     signal gpio_rd_data     : std_logic_vector(31 downto 0);
@@ -109,7 +108,7 @@ begin
     process(cpu_mem_addr, cpu_mem_byte_ena, cpu_mem_wr_data, 
             ram_rd_data, gpio_rd_data, timer_rd_data,
             uart_rd_data, spi_rd_data, timer1_rd_data,
-            timer2_rd_data)
+            timer2_rd_data, rom_rd_data)
     begin
         -- Výchozí stavy (Zabraňují nechtěnému zápisu)
         ram_byte_ena    <= "0000";
@@ -119,23 +118,20 @@ begin
         spi_cs          <= '0';
         timer1_cs       <= '0';
         timer2_cs       <= '0';
-        rom_cs          <= '0';
-        ram_cs          <= '0';
         cpu_mem_rd_data <= (others => '0');
         tb_success      <= '0';
         tb_error_id     <= (others => '0');
 
-        -- 1) NOVÉ: Boot ROM (0x00000000 až 0x00000FFF) - např. 4 KB
+        -- A) Boot ROM (0x00000000 až 0x00000FFF) - např. 4 KB
         if cpu_mem_addr(31 downto 12) = x"00000" then
-            rom_cs <= '1';
             cpu_mem_rd_data <= rom_rd_data;
 
-        -- A) Pokud adresa začíná 0x2000XXXX -> Směruj do RAM
-        elsif cpu_mem_addr(31 downto 28) = x"2000" then
+        -- B) Pokud adresa začíná 0x2000XXXX -> Směruj do RAM
+        elsif cpu_mem_addr(31 downto 28) = x"2" then
             ram_byte_ena    <= cpu_mem_byte_ena; -- Povol zápis do RAM
             cpu_mem_rd_data <= ram_rd_data;      -- Čti z RAM
 
-        -- B) Pokud je adresa 0xFFFFFFFC -> Směruj do Debug Portu
+        -- C) Pokud je adresa 0xFFFFFFFC -> Směruj do Debug Portu
         elsif cpu_mem_addr = x"FFFFFFFC" and cpu_mem_byte_ena /= "0000" then
             if cpu_mem_wr_data = x"00000001" then
                 tb_success <= '1';
@@ -143,37 +139,36 @@ begin
                 tb_error_id <= cpu_mem_wr_data(15 downto 0);
             end if;
 
-        -- C) GPIO Port (0x40000000)
+        -- D) GPIO Port (0x40000000)
         elsif cpu_mem_addr(31 downto 12) = x"40000" then
             gpio_cs <= '1';
             cpu_mem_rd_data <= gpio_rd_data;
 
-        -- D) UART Port (0x40001000)
+        -- E) UART Port (0x40001000)
         elsif cpu_mem_addr(31 downto 12) = x"40001" then
             uart_cs <= '1';
             cpu_mem_rd_data <= uart_rd_data;
 
-        -- E) SPI Port (0x40002000)
+        -- F) SPI Port (0x40002000)
         elsif cpu_mem_addr(31 downto 12) = x"40002" then
             spi_cs <= '1';
             cpu_mem_rd_data <= spi_rd_data;
 
-        -- F) HW Timer 1 (0x40003000)
+        -- G) HW Timer 1 (0x40003000)
         elsif cpu_mem_addr(31 downto 12) = x"40003" then
             timer1_cs <= '1';
             cpu_mem_rd_data <= timer1_rd_data;
 
-        -- G) HW Timer 2 (0x40004000)
+        -- H) HW Timer 2 (0x40004000)
         elsif cpu_mem_addr(31 downto 12) = x"40004" then
             timer2_cs <= '1';
             cpu_mem_rd_data <= timer2_rd_data;
 
-        -- H) Systémový časovač MTIME (0x8000XXXX)
+        -- I) Systémový časovač MTIME (0x8000XXXX)
         elsif cpu_mem_addr(31 downto 28) = x"8" then
             timer_cs <= '1';
             cpu_mem_rd_data <= timer_rd_data;
 
-        -- Zde v budoucnu přidáme "elsif cpu_mem_addr(31 downto 28) = x"4" pro GPIO!
         end if;
     end process;
 
@@ -198,12 +193,13 @@ begin
     shared_irq_ext <= gpio_irq or uart_irq or timer1_irq or timer2_irq;
 
     -- ========================================================================
-    -- 3. BOOT ROM (Paměť č. 1 na adrese 0x00000000 z .mif boot souboru)
+    -- 3. BOOT ROM (Adresa 0x00000000, Kapacita: 2 M4K bloky)
     -- ========================================================================
     u_boot_rom: entity work.dual_port_ram
         generic map (
-            RAM_SIZE_WORDS => 1024, -- 4 KB ROM
-            INIT_FILE      => "bootloader.hex" -- Zde bude zavaděč
+            ADDR_WIDTH => 8,    -- Sběrnice: 8 bitů
+            RAM_WORDS  => 256,  -- Fyzicky: 256 slov (1 KB)
+            INIT_FILE  => "bootloader.mif"
         )
         port map (
             clk         => clk,
@@ -222,12 +218,13 @@ begin
         );
 
     -- ========================================================================
-    -- 4. HLAVNÍ RAM (Paměť č. 2 na adrese 0x20000000 - sdílená paměť)
+    -- 4. HLAVNÍ RAM (Adresa 0x20000000, Kapacita: 22 M4K bloků)
     -- ========================================================================
     u_memory: entity work.dual_port_ram
         generic map (
-            RAM_SIZE_WORDS => 4096, -- 16 KB RAM
-            INIT_FILE      => "programm.hex"
+            ADDR_WIDTH => 12,    -- Sběrnice: 12 bitů (musí pokrýt číslo 2816)
+            RAM_WORDS  => 2816,  -- Fyzicky: 2816 slov (11 KB)
+            INIT_FILE  => "program.mif"
         )
         port map (
             clk         => clk,

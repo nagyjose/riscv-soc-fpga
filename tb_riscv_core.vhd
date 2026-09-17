@@ -11,6 +11,7 @@ architecture sim of tb_riscv_core is
     -- 1. Signály pro propojování na naší virtuální desce
     signal clk          : std_logic := '0';
     signal rst          : std_logic := '1'; -- Začínáme v resetu!
+    signal prog_rst_pin : std_logic := '1'; -- Z programátoru reset zatím nepřichází
     
     signal gpio_pins    : std_logic_vector(19 downto 0) := (others => 'Z');
     
@@ -39,6 +40,7 @@ begin
         port map (
             clk          => clk,
             rst          => rst,
+            prog_rst_pin => prog_rst_pin,
             gpio_pins    => gpio_pins,
             uart_rx_pin  => uart_rx_pin,
             uart_tx_pin  => uart_tx_pin,
