@@ -218,12 +218,12 @@ begin
         );
 
     -- ========================================================================
-    -- 4. HLAVNÍ RAM (Adresa 0x20000000, Kapacita: 22 M4K bloků)
+    -- 4. HLAVNÍ RAM (Adresa 0x20000000, Kapacita: 20 M4K bloků)
     -- ========================================================================
     u_memory: entity work.dual_port_ram
         generic map (
-            ADDR_WIDTH => 12,    -- Sběrnice: 12 bitů (musí pokrýt číslo 2816)
-            RAM_WORDS  => 2816,  -- Fyzicky: 2816 slov (11 KB)
+            ADDR_WIDTH => 12,    -- Sběrnice: 12 bitů (musí pokrýt číslo 2560)
+            RAM_WORDS  => 2560,  -- Fyzicky: 2560 slov (10 KB)
             INIT_FILE  => "program.mif"
         )
         port map (

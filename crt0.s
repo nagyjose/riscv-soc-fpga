@@ -3,7 +3,7 @@
 
 _start:
     /* Konec RAM = 0x20000000 + 11 KB (0x2C00) */
-    li sp, 0x20002C00
+    li sp, 0x20002800
     call main
     
 end_loop:

@@ -9,6 +9,6 @@ python3 mif_gen.py bootloader.bin bootloader.mif 256
 echo "--- 2. Kompiluji Uživatelskou Aplikaci ---"
 $GCC_PATH/riscv64-unknown-elf-gcc -march=rv32im -mabi=ilp32 -nostdlib -O2 -T app.ld crt0.s main.c -o program.elf
 $GCC_PATH/riscv64-unknown-elf-objcopy -O binary program.elf program.bin
-python3 mif_gen.py program.bin program.mif 2816
+python3 mif_gen.py program.bin program.mif 2560
 
 echo "Hotovo! Vygenerován bootloader.mif i program.mif."
