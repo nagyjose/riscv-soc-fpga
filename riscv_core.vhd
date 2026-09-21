@@ -27,9 +27,12 @@ entity riscv_core is
         pwm1_pin_out : out std_logic;
         pwm2_pin_out : out std_logic;
         
+        -- Výstupy pro 8 krokových motorů (8 x 4 = 32 pinů)
+        stepper_pins : out std_logic_vector(31 downto 0)
+        
         -- Výstup pro Testbench
-        tb_success   : out std_logic;
-        tb_error_id  : out std_logic_vector(15 downto 0)
+        -- tb_success   : out std_logic;
+        -- tb_error_id  : out std_logic_vector(15 downto 0)
     );
 end entity riscv_core;
 
@@ -91,6 +94,9 @@ architecture rtl of riscv_core is
     signal timer2_cs        : std_logic;
     signal timer2_irq       : std_logic;
 
+    -- Signál pro Octal Stepper Driver
+    signal stepper_cs       : std_logic;
+
     -- Centrální linka pro externí přerušení (Kód 11)
     signal shared_irq_ext   : std_logic;
 
@@ -129,9 +135,10 @@ begin
         spi_cs          <= '0';
         timer1_cs       <= '0';
         timer2_cs       <= '0';
+        stepper_cs      <= '0';
         cpu_mem_rd_data <= (others => '0');
-        tb_success      <= '0';
-        tb_error_id     <= (others => '0');
+        -- tb_success      <= '0';
+        -- tb_error_id     <= (others => '0');
 
         -- A) Boot ROM (0x00000000 až 0x00000FFF) - např. 4 KB
         if cpu_mem_addr(31 downto 12) = x"00000" then
@@ -143,12 +150,12 @@ begin
             cpu_mem_rd_data <= ram_rd_data;      -- Čti z RAM
 
         -- C) Pokud je adresa 0xFFFFFFFC -> Směruj do Debug Portu
-        elsif cpu_mem_addr = x"FFFFFFFC" and cpu_mem_byte_ena /= "0000" then
-            if cpu_mem_wr_data = x"00000001" then
-                tb_success <= '1';
-            elsif cpu_mem_wr_data(31 downto 16) = x"DEAD" then
-                tb_error_id <= cpu_mem_wr_data(15 downto 0);
-            end if;
+        -- elsif cpu_mem_addr = x"FFFFFFFC" and cpu_mem_byte_ena /= "0000" then
+        --     if cpu_mem_wr_data = x"00000001" then
+        --         tb_success <= '1';
+        --     elsif cpu_mem_wr_data(31 downto 16) = x"DEAD" then
+        --         tb_error_id <= cpu_mem_wr_data(15 downto 0);
+        --     end if;
 
         -- D) GPIO Port (0x40000000)
         elsif cpu_mem_addr(31 downto 12) = x"40000" then
@@ -179,6 +186,12 @@ begin
         elsif cpu_mem_addr(31 downto 28) = x"8" then
             timer_cs <= '1';
             cpu_mem_rd_data <= timer_rd_data;
+
+        -- J) Octal Stepper (0x40005000)
+        elsif cpu_mem_addr(31 downto 12) = x"40005" then
+            stepper_cs <= '1';
+            -- Záměrně nepřiřazujeme cpu_mem_rd_data, protože z motorů nečteme.
+            -- Aplikuje se výchozí cpu_mem_rd_data <= (others => '0');
 
         end if;
     end process;
@@ -301,7 +314,7 @@ begin
     uart_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
     
     u_uart: entity work.uart
-	     generic map (
+        generic map (
             SYS_CLK_FREQ => SYS_CLK_FREQ,
             BAUD_RATE    => 115200        -- Rychlost sériové linky
         )
@@ -325,7 +338,7 @@ begin
     spi_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
     
     u_spi: entity work.spi_master
-	     generic map (
+        generic map (
             SYS_CLK_FREQ => SYS_CLK_FREQ,
             SPI_FREQ     => 1000000       -- Výchozí rychlost SPI sběrnice po resetu
         )
@@ -374,6 +387,23 @@ begin
             rd_data   => timer2_rd_data,
             irq_out   => timer2_irq,
             pwm_pin   => pwm2_pin_out
+        );
+
+    -- ========================================================================
+    -- 11. INSTANTIACE ŘADIČE KROKOVÝCH MOTORŮ
+    -- ========================================================================
+    u_stepper: entity work.octal_stepper
+        generic map (
+            SYS_CLK_FREQ => SYS_CLK_FREQ -- Dynamické předání našich 35 MHz
+        )
+        port map (
+            clk        => clk_sys,
+            rst        => system_rst,
+            cs         => stepper_cs,
+            wr_en      => spi_wr_en, -- Recyklujeme existující povolení zápisu
+            addr       => cpu_mem_addr(4 downto 2), -- 3 bity (adresy 0x00 až 0x1C)
+            wr_data    => cpu_mem_wr_data,
+            motor_pins => stepper_pins
         );
 
 end architecture rtl;

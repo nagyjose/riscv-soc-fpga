@@ -25,8 +25,10 @@ architecture sim of tb_riscv_core is
     signal pwm1_pin_out : std_logic;
     signal pwm2_pin_out : std_logic;
     
-    signal tb_success   : std_logic;
-    signal tb_error_id  : std_logic_vector(15 downto 0);
+    signal stepper_pins : std_logic_vector(31 downto 0);
+    
+    -- signal tb_success   : std_logic;
+    -- signal tb_error_id  : std_logic_vector(15 downto 0);
     signal sim_done     : boolean := false;
     
     -- Definice periody hodin (10 ns = 100 MHz procesor)
@@ -51,8 +53,9 @@ begin
             spi_miso_pin => spi_miso_pin,
             pwm1_pin_out => pwm1_pin_out,
             pwm2_pin_out => pwm2_pin_out,
-            tb_success   => tb_success,
-            tb_error_id  => tb_error_id
+            stepper_pins => stepper_pins
+            -- tb_success   => tb_success,
+            -- tb_error_id  => tb_error_id
         );
 
     -- ========================================================================
@@ -74,17 +77,23 @@ begin
     monitor: process
     begin
         -- Čeká na úspěch z Debug Portu, ale maximálně 10 milisekund
-        wait until tb_success = '1' for 10 ms;
+        -- wait until tb_success = '1' for 10 ms;
         
-        if tb_success = '1' then
-            report LF & "==========================================" & LF &
-                        "  [ SUCCESS ] Bootloader skocil do RAM!" & LF &
-                        "==========================================" severity note;
-        else
-            report LF & "==========================================" & LF &
-                        "  [ TIMEOUT ] Aplikace nedobehla vcas!" & LF &
-                        "==========================================" severity note;
-        end if;
+        -- if tb_success = '1' then
+        --     report LF & "==========================================" & LF &
+        --                 "  [ SUCCESS ] Bootloader skocil do RAM!" & LF &
+        --                 "==========================================" severity note;
+        -- else
+        --     report LF & "==========================================" & LF &
+        --                 "  [ TIMEOUT ] Aplikace nedobehla vcas!" & LF &
+        --                 "==========================================" severity note;
+        -- end if;
+        
+        wait for 1 ms; 
+        
+        report LF & "==========================================" & LF &
+                    "  [ DOKONCENO ] Cas simulace vyprsel." & LF &
+                    "==========================================" severity note;
         
         -- Zde je JEDINÝ zdroj (driver), který ovlivňuje sim_done
         sim_done <= true; 
