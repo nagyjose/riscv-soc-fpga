@@ -393,7 +393,7 @@ begin
     -- U JALR je cílem vypočtená adresa z ALU se smazaným nultým bitem.
     -- Ostatní skoky (JAL, Branch) používají normální pc_target.
     -- Trap a MRET mají absolutní prioritu nad čímkoliv jiným!
-    process(trap_fire, trap_target, id_ex.is_mret, epc_out, id_ex.jalr, ex_alu_res, pc_src, pc_target, pc_plus_4)
+    process(trap_fire, trap_target, id_ex, epc_out, ex_alu_res, pc_src, pc_target, pc_plus_4)
     begin
         if trap_fire = '1' then
             pc_next <= trap_target;

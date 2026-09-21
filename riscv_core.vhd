@@ -3,6 +3,9 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity riscv_core is
+    generic (
+        SYS_CLK_FREQ : integer := 35000000 -- ZDE SE NASTAVUJE FREKVENCE PRO CELÝ SYSTÉM
+    );
     port (
         clk          : in std_logic;
         rst          : in std_logic; -- Fyzické tlačítko
@@ -31,6 +34,8 @@ entity riscv_core is
 end entity riscv_core;
 
 architecture rtl of riscv_core is
+
+    signal clk_sys : std_logic := '0';
 
     -- Globální reset
     signal system_rst       : std_logic;
@@ -90,6 +95,12 @@ architecture rtl of riscv_core is
     signal shared_irq_ext   : std_logic;
 
 begin
+
+    u_pll: entity work.sys_pll
+        port map (
+            inclk0 => clk,     -- Těch fyzických 50 MHz z pinu
+            c0     => clk_sys  -- Těch nových čistých 35 MHz do datapath
+        );
 
     -- Jádro se resetuje buď tlačítkem (v '1') nebo programátorem (v '0')
     system_rst <= rst or (not prog_rst_pin);
@@ -177,7 +188,7 @@ begin
     -- ========================================================================
     u_cpu_datapath: entity work.datapath
         port map (
-            clk          => clk,
+            clk          => clk_sys,
             rst          => system_rst,
             instr_addr   => cpu_instr_addr,
             instr_data   => cpu_instr_data,
@@ -202,7 +213,7 @@ begin
             INIT_FILE  => "bootloader.mif"
         )
         port map (
-            clk         => clk,
+            clk         => clk_sys,
             
             -- PORT A (Tahání instrukcí pro procesor)
             addr_a      => cpu_instr_addr,
@@ -227,7 +238,7 @@ begin
             INIT_FILE  => "program.mif"
         )
         port map (
-            clk         => clk,
+            clk         => clk_sys,
             
             -- PORT A (Tahání instrukcí pro procesor)
             addr_a      => cpu_instr_addr,
@@ -252,7 +263,7 @@ begin
             PINS => 20 -- Úspora LE
         )
         port map (
-            clk       => clk,
+            clk       => clk_sys,
             rst       => system_rst,
             cs        => gpio_cs,
             wr_en     => gpio_wr_en,
@@ -270,11 +281,11 @@ begin
     
     u_mtime: entity work.mtime
         generic map (
-            SYS_CLK_FREQ => 100000000, -- 100 MHz
-            TIMER_FREQ   => 1000000    -- 1 MHz (1 tik = 1 us)
+            SYS_CLK_FREQ => SYS_CLK_FREQ, -- 35 MHz
+            TIMER_FREQ   => 1000000       -- 1 MHz (1 tik = 1 us)
         )
         port map (
-            clk       => clk,
+            clk       => clk_sys,
             rst       => system_rst,
             cs        => timer_cs,
             wr_en     => timer_wr_en,
@@ -290,8 +301,12 @@ begin
     uart_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
     
     u_uart: entity work.uart
+	     generic map (
+            SYS_CLK_FREQ => SYS_CLK_FREQ,
+            BAUD_RATE    => 115200        -- Rychlost sériové linky
+        )
         port map (
-            clk       => clk,
+            clk       => clk_sys,
             rst       => system_rst,
             cs        => uart_cs,
             wr_en     => uart_wr_en,
@@ -310,8 +325,12 @@ begin
     spi_wr_en <= '1' when cpu_mem_byte_ena /= "0000" else '0';
     
     u_spi: entity work.spi_master
+	     generic map (
+            SYS_CLK_FREQ => SYS_CLK_FREQ,
+            SPI_FREQ     => 1000000       -- Výchozí rychlost SPI sběrnice po resetu
+        )
         port map (
-            clk       => clk,
+            clk       => clk_sys,
             rst       => system_rst,
             cs        => spi_cs,
             wr_en     => spi_wr_en,
@@ -328,7 +347,7 @@ begin
     -- ========================================================================
     u_timer1: entity work.pwm_timer
         port map (
-            clk       => clk,
+            clk       => clk_sys,
             rst       => system_rst,
             cs        => timer1_cs,
             -- Opět využíváme univerzální signál zápisu z nadřazené logiky
@@ -345,7 +364,7 @@ begin
     -- ========================================================================
     u_timer2: entity work.pwm_timer
         port map (
-            clk       => clk,
+            clk       => clk_sys,
             rst       => system_rst,
             cs        => timer2_cs,
             -- Opět využíváme univerzální signál zápisu z nadřazené logiky

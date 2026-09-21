@@ -3,6 +3,10 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity uart is
+    generic (
+        SYS_CLK_FREQ : integer := 35000000;
+        BAUD_RATE    : integer := 115200
+    );
     port (
         clk       : in  std_logic;
         rst       : in  std_logic;
@@ -85,8 +89,8 @@ begin
     begin
         if rising_edge(clk) then
             if rst = '1' then
-                -- Výchozí dělička: 100 MHz / 115200 = 868
-                r_baud_div <= std_logic_vector(to_unsigned(868, 16));
+                -- Výchozí dělička: 35 MHz / 115200 = 303
+                r_baud_div <= std_logic_vector(to_unsigned(SYS_CLK_FREQ / BAUD_RATE, 16));
             else
                 if cs = '1' and wr_en = '1' then
                     if addr = "10" then

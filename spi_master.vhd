@@ -3,6 +3,10 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity spi_master is
+    generic (
+        SYS_CLK_FREQ : integer := 35000000;
+        SPI_FREQ     : integer := 1000000
+    );
     port (
         clk       : in  std_logic;
         rst       : in  std_logic;
@@ -49,7 +53,8 @@ begin
                 spi_sck     <= '0';
                 spi_mosi    <= '0';
                 busy        <= '0';
-                r_baud_half <= to_unsigned(50, 16); -- Výchozí 1 MHz (při 100MHz sys_clk)
+					 -- Automatický výpočet poloviční periody pro SCK
+                r_baud_half <= to_unsigned(SYS_CLK_FREQ / (2 * SPI_FREQ), 16);
                 shift_reg   <= (others => '0');
                 clk_cnt     <= (others => '0');
                 bit_cnt     <= 0;
