@@ -25,7 +25,7 @@ unsigned char uart_getc() {
 }
 
 void main() {
-    UART_BAUD = 868; // Nastavíme 115200 (předpoklad: 100MHz / 115200)
+    UART_BAUD = 304; // Nastavíme 115200 (předpoklad: 100MHz / 115200)
 
     char c;
     
