@@ -13,5 +13,7 @@ typedef void (*irq_callback_t)(void);
 void irq_register_timer(irq_callback_t callback);
 void irq_register_uart(irq_callback_t callback);
 void irq_register_gpio(irq_callback_t callback);
+void irq_register_pwm1(irq_callback_t callback);
+void irq_register_pwm2(irq_callback_t callback);
 
 #endif // HAL_IRQ_H

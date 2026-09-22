@@ -5,11 +5,6 @@
 #include "hal_gpio.h"
 #include "hal_pwm.h"
 
-// Hardwarové příznaky přerušení z periferií (dle tvého VHDL/C kódu)
-#define UART_RX_READY    (1 << 1) // Bit 1 v UART_STATUS
-#define TIMER1_IRQ_PEND  (1 << 2) // Bit 2 v TIMER1_CTRL
-#define GPIO_IRQ_BIT     (1 << 0) // Bit 0 v GPIO_IRQ_PEND
-
 // Kódy v registru mcause
 #define MCAUSE_EXT_IRQ   0x8000000B
 #define MCAUSE_TIMER_IRQ 0x80000007
@@ -18,11 +13,15 @@
 static irq_callback_t cb_mtime = 0;
 static irq_callback_t cb_uart  = 0;
 static irq_callback_t cb_gpio  = 0;
+static irq_callback_t cb_pwm1  = 0;
+static irq_callback_t cb_pwm2  = 0;
 
 // Registrační funkce
 void irq_register_timer(irq_callback_t callback) { cb_mtime = callback; }
 void irq_register_uart(irq_callback_t callback)  { cb_uart = callback; }
 void irq_register_gpio(irq_callback_t callback)  { cb_gpio = callback; }
+void irq_register_pwm1(irq_callback_t callback)  { cb_pwm1 = callback; }
+void irq_register_pwm2(irq_callback_t callback)  { cb_pwm2 = callback; }
 
 // ============================================================================
 // CENTRÁLNÍ DISPEČER (Spouští hardware automaticky)
@@ -33,29 +32,28 @@ __attribute__((interrupt("machine"))) void trap_handler(void) {
     // A) Sdílené externí přerušení (Periferie)
     if (cause == MCAUSE_EXT_IRQ) {
         
-        // 1. Zvonek od UARTu?
+        // 1. Zvonek od UARTu
         // (Zda IRQ vzniklo, zjišťujeme přímo z registru UART_STATUS)
-        if (HW_REG32(UART_BASE + 0x04) & UART_RX_READY) {
-            if (cb_uart) cb_uart(); // Zavoláme uživatelský kód
+        if (uart_data_available(HW_UART)) {
+            if (cb_uart) cb_uart(); 
             // (Vyčtení dat a smazání IRQ musí udělat callback pomocí hal_uart_getc!)
         }
         
-        // 2. Zvonek od Tlačítka (GPIO)?
-        if (HW_REG32(GPIO_BASE + 0x10) & GPIO_IRQ_BIT) {
+        // 2. Zvonek od Tlačítka (GPIO)
+        if (gpio_irq_get_pending(HW_GPIO)) {
             if (cb_gpio) cb_gpio();
             // (Smazání W1C příznaku musí udělat callback přes HAL GPIO!)
         }
-
-        // 3. Zvonek od HW PWM Timeru?
-        // Zvonek od TIMER1?
+        
+        // 3. Zvonek od PWM Timeru 1
         if (pwm_irq_is_pending(HW_TIMER1)) {
-            if (cb_timer1) cb_timer1(); // Uživatelská funkce
-            pwm_irq_clear(HW_TIMER1);   // Bezpečné smazání příznaku
+            if (cb_pwm1) cb_pwm1();
+            pwm_irq_clear(HW_TIMER1); // Smaže bit 2
         }
 
-        // Zvonek od TIMER2?
+        // 4. Zvonek od PWM Timeru 2
         if (pwm_irq_is_pending(HW_TIMER2)) {
-            if (cb_timer2) cb_timer2();
+            if (cb_pwm2) cb_pwm2();
             pwm_irq_clear(HW_TIMER2);
         }
     } 
