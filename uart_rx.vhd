@@ -26,11 +26,9 @@ architecture rtl of uart_rx is
     signal rx_sync2 : std_logic;
     
     -- Dělička pro 16x oversampling
-    signal clk_div  : unsigned(11 downto 0);
-    signal tick_16x : std_logic;
+    signal clk_div  : unsigned(15 downto 0);
     
     -- Čítače a registry
-    signal tick_cnt : integer range 0 to 15;
     signal bit_idx  : integer range 0 to 7;
     signal shift_reg: std_logic_vector(7 downto 0);
     
@@ -52,32 +50,7 @@ begin
     end process;
 
     -- ========================================================================
-    -- 2. GENERÁTOR 16x OVERSAMPLING TIKŮ
-    -- ========================================================================
-    process(clk)
-        variable baud_16x_target : unsigned(11 downto 0);
-    begin
-        if rising_edge(clk) then
-            if rst = '1' then
-                clk_div  <= (others => '0');
-                tick_16x <= '0';
-            else
-                -- Cílová hodnota = baud_div / 16
-                baud_16x_target := unsigned(baud_div(15 downto 4));
-                
-                if clk_div >= baud_16x_target - 1 then
-                    clk_div  <= (others => '0');
-                    tick_16x <= '1';
-                else
-                    clk_div  <= clk_div + 1;
-                    tick_16x <= '0';
-                end if;
-            end if;
-        end if;
-    end process;
-
-    -- ========================================================================
-    -- 3. HLAVNÍ PŘIJÍMACÍ AUTOMAT
+    -- 2. HLAVNÍ PŘIJÍMACÍ AUTOMAT
     -- ========================================================================
     process(clk)
     begin
@@ -86,63 +59,54 @@ begin
                 state    <= IDLE;
                 rx_valid <= '0';
                 rx_data  <= (others => '0');
-                tick_cnt <= 0;
+                clk_div  <= (others => '0');
                 bit_idx  <= 0;
             else
-                -- Výchozí stav pulzního signálu (zvedne se jen na 1 takt)
                 rx_valid <= '0';
                 
                 case state is
                     when IDLE =>
-                        tick_cnt <= 0;
-                        bit_idx  <= 0;
-                        -- Čekáme na sestupnou hranu (začátek Start bitu)
+                        bit_idx <= 0;
                         if rx_sync2 = '0' then
-                            state <= START_BIT;
+                            -- Posuneme se přesně do poloviny Start bitu (baud_div / 2)
+                            clk_div <= unsigned("0" & baud_div(15 downto 1)); 
+                            state   <= START_BIT;
                         end if;
                         
                     when START_BIT =>
-                        if tick_16x = '1' then
-                            if tick_cnt = 7 then -- Jsme přesně uprostřed Start bitu!
-                                if rx_sync2 = '0' then
-                                    tick_cnt <= 0;
-                                    state    <= DATA_BITS;
-                                else
-                                    -- Falešný poplach (šum), vracíme se zpět
-                                    state <= IDLE;
-                                end if;
+                        if clk_div = 0 then
+                            if rx_sync2 = '0' then
+                                -- Jsme uprostřed, nabijeme čítač na celý jeden bit
+                                clk_div <= unsigned(baud_div) - 1;
+                                state   <= DATA_BITS;
                             else
-                                tick_cnt <= tick_cnt + 1;
+                                state <= IDLE; -- Šum, vracíme se
                             end if;
+                        else
+                            clk_div <= clk_div - 1;
                         end if;
                         
                     when DATA_BITS =>
-                        if tick_16x = '1' then
-                            if tick_cnt = 15 then -- Přeskočili jsme o celý jeden bit
-                                tick_cnt <= 0;
-                                -- LSB přijde jako první, nasouváme z vrchu dolů
-                                shift_reg(bit_idx) <= rx_sync2;
-                                
-                                if bit_idx = 7 then
-                                    state <= STOP_BIT;
-                                else
-                                    bit_idx <= bit_idx + 1;
-                                end if;
+                        if clk_div = 0 then
+                            shift_reg(bit_idx) <= rx_sync2;
+                            clk_div <= unsigned(baud_div) - 1;
+                            
+                            if bit_idx = 7 then
+                                state <= STOP_BIT;
                             else
-                                tick_cnt <= tick_cnt + 1;
+                                bit_idx <= bit_idx + 1;
                             end if;
+                        else
+                            clk_div <= clk_div - 1;
                         end if;
                         
                     when STOP_BIT =>
-                        if tick_16x = '1' then
-                            if tick_cnt = 15 then -- Jsme uprostřed Stop bitu
-                                -- Zapíšeme výsledek na výstup a vystřelíme valid pulz
-                                rx_data  <= shift_reg;
-                                rx_valid <= '1';
-                                state    <= IDLE;
-                            else
-                                tick_cnt <= tick_cnt + 1;
-                            end if;
+                        if clk_div = 0 then
+                            rx_data  <= shift_reg;
+                            rx_valid <= '1';
+                            state    <= IDLE;
+                        else
+                            clk_div <= clk_div - 1;
                         end if;
                 end case;
             end if;

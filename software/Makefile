@@ -2,9 +2,9 @@
 # NASTAVENÍ PROJEKTU
 # ==============================================================================
 # Výchozí aplikace (zkompiluje se, pokud nezadáš make APP=...)
-APP ?= hello_world
+APP ?= demo_io
 # Výchozí COM port pro nahrávání (lze přepsat přes make flash PORT=COMx)
-PORT ?= COM3
+PORT ?= COM12
 
 # Nástroje (z tvého xPack GCC a Build Tools)
 CC = riscv-none-elf-gcc
@@ -47,8 +47,8 @@ $(ELF): $(SRCS)
 $(BIN): $(ELF)
 	$(OBJCOPY) -O binary $< $@
 	@echo "=========================================================="
-	@echo " [SUCCESS] Aplikace '$(APP)' byla zkompilována!"
-	@echo " Výstup: $(BIN)"
+	@echo " [SUCCESS] Aplikace '$(APP)' byla zkompilovana!"
+	@echo " Vystup: $(BIN)"
 	@echo "=========================================================="
 
 # Automatické nahrání do FPGA

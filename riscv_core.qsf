@@ -78,14 +78,14 @@ set_location_assignment PIN_133 -to gpio_pins[13]
 set_location_assignment PIN_134 -to gpio_pins[14]
 set_location_assignment PIN_135 -to gpio_pins[15]
 set_location_assignment PIN_136 -to gpio_pins[16]
-set_location_assignment PIN_88 -to uart_rx_pin
-set_location_assignment PIN_87 -to uart_tx_pin
-set_location_assignment PIN_89 -to prog_rst_pin
+set_location_assignment PIN_94 -to uart_rx_pin
+set_location_assignment PIN_93 -to uart_tx_pin
+set_location_assignment PIN_92 -to prog_rst_pin
 set_location_assignment PIN_103 -to spi_sck_pin
 set_location_assignment PIN_101 -to spi_mosi_pin
 set_location_assignment PIN_104 -to spi_miso_pin
-set_location_assignment PIN_93 -to pwm1_pin_out
-set_location_assignment PIN_94 -to pwm2_pin_out
+set_location_assignment PIN_96 -to pwm1_pin_out
+set_location_assignment PIN_97 -to pwm2_pin_out
 set_global_assignment -name USE_CONFIGURATION_DEVICE ON
 set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
 set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
@@ -123,6 +123,7 @@ set_location_assignment PIN_69 -to stepper_pins[18]
 set_location_assignment PIN_70 -to stepper_pins[22]
 set_location_assignment PIN_71 -to stepper_pins[19]
 set_location_assignment PIN_72 -to stepper_pins[23]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to prog_rst_pin
 set_global_assignment -name CYCLONEII_RESERVE_NCEO_AFTER_CONFIGURATION "USE AS REGULAR IO"
 set_global_assignment -name RESERVE_ASDO_AFTER_CONFIGURATION "USE AS REGULAR IO"
 set_global_assignment -name VHDL_FILE tb_riscv_core.vhd
@@ -155,4 +156,6 @@ set_global_assignment -name SDC_FILE riscv_core.sdc
 set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
 set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
 set_global_assignment -name RESERVE_ALL_UNUSED_PINS_NO_OUTPUT_GND "AS INPUT TRI-STATED"
+set_global_assignment -name CDF_FILE output_files/Chain2.cdf
+set_global_assignment -name CDF_FILE output_files/Chain3.cdf
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

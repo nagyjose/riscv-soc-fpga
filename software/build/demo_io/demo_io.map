@@ -1,0 +1,178 @@
+
+There are no discarded input sections
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+RAM              0x20000000         0x00002800         xrw
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+LOAD C:\Users\josef\AppData\Local\Temp\ccKClXwz.o
+LOAD C:\Users\josef\AppData\Local\Temp\ccSIG4bD.o
+LOAD C:\Users\josef\AppData\Local\Temp\cc16K0dU.o
+LOAD C:\Users\josef\AppData\Local\Temp\cc0pjCTm.o
+LOAD C:\Users\josef\AppData\Local\Temp\ccXRypT3.o
+LOAD C:\Users\josef\AppData\Local\Temp\cccvBDqZ.o
+LOAD C:\Users\josef\AppData\Local\Temp\cc94kom6.o
+LOAD C:\Users\josef\AppData\Local\Temp\ccvffwEg.o
+LOAD C:\Users\josef\AppData\Local\Temp\cczwbbFu.o
+
+.text           0x20000000      0x74e
+ *(.init)
+ .init          0x20000000       0x10 C:\Users\josef\AppData\Local\Temp\cczwbbFu.o
+                0x20000000                _start
+ *(.text*)
+ .text          0x20000010       0x9c C:\Users\josef\AppData\Local\Temp\ccKClXwz.o
+                0x20000010                my_uart_callback
+                0x20000064                my_gpio_callback
+ .text.startup  0x200000ac       0xb4 C:\Users\josef\AppData\Local\Temp\ccKClXwz.o
+                0x200000ac                main
+ .text          0x20000160      0x114 C:\Users\josef\AppData\Local\Temp\ccSIG4bD.o
+                0x20000160                gpio_set_dir
+                0x20000188                gpio_set_dir_mask
+                0x200001b0                gpio_write_pin
+                0x200001d0                gpio_write_port
+                0x200001d8                gpio_toggle_pin
+                0x200001e8                gpio_read_pin
+                0x200001f4                gpio_read_port
+                0x200001fc                gpio_irq_enable
+                0x20000248                gpio_irq_disable
+                0x20000258                gpio_irq_clear
+                0x20000264                gpio_irq_get_pending
+ .text          0x20000274      0x18c C:\Users\josef\AppData\Local\Temp\cc16K0dU.o
+                0x20000274                trap_handler
+                0x200003b4                irq_register_timer
+                0x200003c0                irq_register_uart
+                0x200003cc                irq_register_gpio
+                0x200003d8                irq_register_pwm1
+                0x200003e4                irq_register_pwm2
+                0x200003f0                irq_init
+ .text          0x20000400       0x5c C:\Users\josef\AppData\Local\Temp\cc0pjCTm.o
+                0x20000400                mtime_get_time
+                0x20000408                mtime_set_compare
+                0x20000410                mtime_set_compare_relative
+                0x20000420                mtime_irq_disable
+                0x2000042c                mtime_delay_us
+                0x20000440                mtime_delay_ms
+ .text          0x2000045c       0x80 C:\Users\josef\AppData\Local\Temp\ccXRypT3.o
+                0x2000045c                pwm_init
+                0x20000478                pwm_set_duty
+                0x20000480                pwm_enable
+                0x20000490                pwm_disable
+                0x200004a0                pwm_irq_enable
+                0x200004b0                pwm_irq_disable
+                0x200004c0                pwm_irq_is_pending
+                0x200004cc                pwm_irq_clear
+ .text          0x200004dc       0x84 C:\Users\josef\AppData\Local\Temp\cccvBDqZ.o
+                0x200004dc                spi_init
+                0x200004ec                spi_transfer
+                0x20000508                spi_write_buffer
+                0x20000534                spi_read_buffer
+ .text          0x20000560       0xac C:\Users\josef\AppData\Local\Temp\cc94kom6.o
+                0x20000560                stepper_set_speed
+                0x200005a8                stepper_run
+                0x200005e0                stepper_stop
+                0x200005fc                stepper_write_ctrl
+                0x20000604                stepper_read_ctrl
+ .text          0x2000060c       0x6c C:\Users\josef\AppData\Local\Temp\ccvffwEg.o
+                0x2000060c                uart_init
+                0x20000618                uart_putc
+                0x2000062c                uart_puts
+                0x20000654                uart_data_available
+                0x20000660                uart_getc
+ .text          0x20000678        0x0 C:\Users\josef\AppData\Local\Temp\cczwbbFu.o
+ *(.rodata*)
+ .rodata.str1.4
+                0x20000678       0xd6 C:\Users\josef\AppData\Local\Temp\ccKClXwz.o
+
+.rela.dyn       0x20000750        0x0
+ .rela.init     0x20000750        0x0 C:\Users\josef\AppData\Local\Temp\ccKClXwz.o
+
+.data           0x2000074e        0x0
+ *(.data*)
+ .data          0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\ccKClXwz.o
+ .data          0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\ccSIG4bD.o
+ .data          0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\cc16K0dU.o
+ .data          0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\cc0pjCTm.o
+ .data          0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\ccXRypT3.o
+ .data          0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\cccvBDqZ.o
+ .data          0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\cc94kom6.o
+ .data          0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\ccvffwEg.o
+ .data          0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\cczwbbFu.o
+
+.bss            0x2000074e        0x0
+ *(.bss*)
+ .bss           0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\ccKClXwz.o
+ .bss           0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\ccSIG4bD.o
+ .bss           0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\cc16K0dU.o
+ .bss           0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\cc0pjCTm.o
+ .bss           0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\ccXRypT3.o
+ .bss           0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\cccvBDqZ.o
+ .bss           0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\cc94kom6.o
+ .bss           0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\ccvffwEg.o
+ .bss           0x2000074e        0x0 C:\Users\josef\AppData\Local\Temp\cczwbbFu.o
+                0x20002800                        _estack = (ORIGIN (RAM) + LENGTH (RAM))
+OUTPUT(build/demo_io/demo_io.elf elf32-littleriscv)
+
+.sbss           0x20000750       0x14
+ .sbss          0x20000750       0x14 C:\Users\josef\AppData\Local\Temp\cc16K0dU.o
+
+.comment        0x00000000       0x33
+ .comment       0x00000000       0x33 C:\Users\josef\AppData\Local\Temp\ccKClXwz.o
+                                 0x34 (size before relaxing)
+ .comment       0x00000033        0x0 C:\Users\josef\AppData\Local\Temp\ccSIG4bD.o
+                                 0x34 (size before relaxing)
+ .comment       0x00000033        0x0 C:\Users\josef\AppData\Local\Temp\cc16K0dU.o
+                                 0x34 (size before relaxing)
+ .comment       0x00000033        0x0 C:\Users\josef\AppData\Local\Temp\cc0pjCTm.o
+                                 0x34 (size before relaxing)
+ .comment       0x00000033        0x0 C:\Users\josef\AppData\Local\Temp\ccXRypT3.o
+                                 0x34 (size before relaxing)
+ .comment       0x00000033        0x0 C:\Users\josef\AppData\Local\Temp\cccvBDqZ.o
+                                 0x34 (size before relaxing)
+ .comment       0x00000033        0x0 C:\Users\josef\AppData\Local\Temp\cc94kom6.o
+                                 0x34 (size before relaxing)
+ .comment       0x00000033        0x0 C:\Users\josef\AppData\Local\Temp\ccvffwEg.o
+                                 0x34 (size before relaxing)
+
+.note.GNU-stack
+                0x00000000        0x0
+ .note.GNU-stack
+                0x00000000        0x0 C:\Users\josef\AppData\Local\Temp\ccKClXwz.o
+ .note.GNU-stack
+                0x00000000        0x0 C:\Users\josef\AppData\Local\Temp\ccSIG4bD.o
+ .note.GNU-stack
+                0x00000000        0x0 C:\Users\josef\AppData\Local\Temp\cc16K0dU.o
+ .note.GNU-stack
+                0x00000000        0x0 C:\Users\josef\AppData\Local\Temp\cc0pjCTm.o
+ .note.GNU-stack
+                0x00000000        0x0 C:\Users\josef\AppData\Local\Temp\ccXRypT3.o
+ .note.GNU-stack
+                0x00000000        0x0 C:\Users\josef\AppData\Local\Temp\cccvBDqZ.o
+ .note.GNU-stack
+                0x00000000        0x0 C:\Users\josef\AppData\Local\Temp\cc94kom6.o
+ .note.GNU-stack
+                0x00000000        0x0 C:\Users\josef\AppData\Local\Temp\ccvffwEg.o
+
+.riscv.attributes
+                0x00000000       0x45
+ .riscv.attributes
+                0x00000000       0x45 C:\Users\josef\AppData\Local\Temp\ccKClXwz.o
+ .riscv.attributes
+                0x00000045       0x41 C:\Users\josef\AppData\Local\Temp\ccSIG4bD.o
+ .riscv.attributes
+                0x00000086       0x45 C:\Users\josef\AppData\Local\Temp\cc16K0dU.o
+ .riscv.attributes
+                0x000000cb       0x41 C:\Users\josef\AppData\Local\Temp\cc0pjCTm.o
+ .riscv.attributes
+                0x0000010c       0x41 C:\Users\josef\AppData\Local\Temp\ccXRypT3.o
+ .riscv.attributes
+                0x0000014d       0x41 C:\Users\josef\AppData\Local\Temp\cccvBDqZ.o
+ .riscv.attributes
+                0x0000018e       0x41 C:\Users\josef\AppData\Local\Temp\cc94kom6.o
+ .riscv.attributes
+                0x000001cf       0x41 C:\Users\josef\AppData\Local\Temp\ccvffwEg.o
+ .riscv.attributes
+                0x00000210       0x3f C:\Users\josef\AppData\Local\Temp\cczwbbFu.o

@@ -2,7 +2,7 @@ CC = riscv-none-elf-gcc
 OBJCOPY = riscv-none-elf-objcopy
 
 # Vlajky - držíme stejnou hardwarovou výbavu, aby kód přesně pasoval na procesor
-CFLAGS = -march=rv32im_zicsr_zbb_zbs -mabi=ilp32 -O2 -ffreestanding -nostdlib
+CFLAGS = -march=rv32im_zicsr_zbb_zbs -mabi=ilp32 -O0 -ffreestanding -nostdlib
 
 all: ../bootloader.mif
 

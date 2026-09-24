@@ -43,6 +43,12 @@ architecture rtl of uart is
     signal fifo_full  : std_logic;
     signal fifo_rd    : std_logic;
     signal fifo_dout  : std_logic_vector(7 downto 0);
+    
+    -- Registry pro uzamčení dat
+    signal is_reading      : std_logic := '0';
+    signal latched_rx_data : std_logic_vector(7 downto 0) := (others => '0');
+    signal pop_active      : std_logic := '0';
+
 begin
 
     -- ========================================================================
@@ -52,8 +58,10 @@ begin
         port map (
             clk      => clk,
             rst      => rst,
-            tx_start => tx_start,
-            tx_data  => wr_data(7 downto 0),
+            tx_start => rx_valid, -- BYPASS: Odesílej, jakmile RX zachytí znak
+            tx_data  => rx_data,  -- BYPASS: Znak přímo z RX
+            --tx_start => tx_start,
+            --tx_data  => wr_data(7 downto 0),
             baud_div => r_baud_div,
             tx_pin   => tx_pin,
             tx_ready => tx_ready
@@ -102,26 +110,46 @@ begin
     end process;
 
     -- Kombinační start pro vysílač (Startuje přesně ve chvíli zápisu do registru 0x00)
-    tx_start <= '1' when (cs = '1' and wr_en = '1' and addr = "00") else '0';
+    --tx_start <= '1' when (cs = '1' and wr_en = '1' and addr = "00") else '0';
 
     -- ========================================================================
-    -- 3. SBĚRNICOVÁ LOGIKA (Čtení do procesoru)
+    -- 3. SBĚRNICOVÁ LOGIKA (Bezpečné čtení a explicitní smazání přes zápis)
     -- ========================================================================
-    -- Odstranění přečteného znaku z FIFO (puls při čtení adresy 0x00)
-    fifo_rd <= '1' when (cs = '1' and wr_en = '0' and addr = "00") else '0';
+    
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if rst = '1' then
+                fifo_rd    <= '0';
+                pop_active <= '0';
+            else
+                -- Zápis jakékoliv hodnoty na adresu 0x01 (STATUS) bezpečně smaže znak z FIFO
+                if cs = '1' and wr_en = '1' and addr = "01" then
+                    if pop_active = '0' then
+                        fifo_rd    <= '1'; 
+                        pop_active <= '1'; -- Zámek proti vícetaktovému zápisu
+                    else
+                        fifo_rd    <= '0';
+                    end if;
+                else
+                    fifo_rd    <= '0';
+                    pop_active <= '0';
+                end if;
+            end if;
+        end if;
+    end process;
 
     process(addr, fifo_dout, tx_ready, fifo_empty, fifo_full, r_baud_div)
         variable status_reg : std_logic_vector(31 downto 0);
     begin
-        -- Skládání stavového registru
         status_reg := (others => '0');
         status_reg(0) := tx_ready;
-        status_reg(1) := not fifo_empty; -- Překlad: 1 = RX data jsou připravena ke čtení
+        status_reg(1) := not fifo_empty;
         status_reg(2) := fifo_full;
         
         rd_data <= (others => '0');
         case addr is
-            when "00" => rd_data(7 downto 0) <= fifo_dout;
+            when "00" => rd_data(7 downto 0) <= fifo_dout; -- Nyní pouze bezpečně nahlížíme
             when "01" => rd_data <= status_reg;
             when "10" => rd_data(15 downto 0) <= r_baud_div;
             when others => null;
